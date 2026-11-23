@@ -3,14 +3,25 @@
 
 import importlib
 import inspect
+import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
+import numpy as np
 import pytest
 
 import earthinr
+import earthinr.models.onnx as onnx_mod
 from earthinr import ConfigError
-from earthinr.models import LocationEncoder, ReSIRENLocationEncoder, registry
+from earthinr.models import (
+    ONNX_PRESET_SPECS,
+    LocationEncoder,
+    ONNXLocationEncoder,
+    ReSIRENLocationEncoder,
+    onnx_encoder,
+    registry,
+)
 from earthinr.models.registry import (
     ModelPreset,
     build_model,
@@ -297,8 +308,59 @@ class TestPackagedPresets:
         with pytest.raises(ConfigError, match="missing required 'target'"):
             get_model_preset('notarget')
 
+    def test_get_model_onnx_backend(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _StubNode:
+            def __init__(self, name: str, shape: list[Any]) -> None:
+                self.name = name
+                self.shape = shape
+
+        class _StubSession:
+            def __init__(self, path: str, providers: list[str] | None = None) -> None:
+                self.path = path
+                self.providers = providers
+
+            def get_inputs(self) -> list[_StubNode]:
+                return [_StubNode('coords', ['batch', 2])]
+
+            def get_outputs(self) -> list[_StubNode]:
+                return [_StubNode('embedding', ['batch', 256])]
+
+            def run(
+                self, output_names: list[str] | None, feed: dict[str, np.ndarray]
+            ) -> list[np.ndarray]:
+                batch = feed['coords'].shape[0]
+                return [np.zeros((batch, 256), dtype=np.float32)]
+
+        fake_ort: Any = ModuleType('onnxruntime')
+        fake_ort.InferenceSession = _StubSession
+        monkeypatch.setitem(sys.modules, 'onnxruntime', fake_ort)
+        fake_path = tmp_path / 'sinr.onnx'
+        fake_path.write_bytes(b'fake')
+        monkeypatch.setattr(onnx_mod, 'hf_download', lambda repo, fn: str(fake_path))
+
+        enc = get_model('sinr', backend='onnx', device='cpu')
+        assert isinstance(enc, ONNXLocationEncoder)
+        assert enc.name == 'sinr'
+        assert enc.embed_dim == 256
+
+        with pytest.raises(ValueError, match='does not have an ONNX export'):
+            get_model('xyz', backend='onnx')
+        with pytest.raises(ValueError, match='does not have an ONNX export'):
+            get_model('aef', backend='onnx')
+        with pytest.raises(ValueError, match='does not have an ONNX export'):
+            get_model('does-not-exist', backend='onnx')
+
+        bad_backend: Any = 'tensorrt'
+        with pytest.raises(ValueError, match='Unsupported backend'):
+            get_model('sinr', backend=bad_backend)
+
     def test_lazy_top_level_exports(self) -> None:
         assert earthinr.__version__ == '0.1.0'
         assert earthinr.ConfigError is ConfigError
         assert earthinr.models.XYZLocationEncoder is not None
+        assert earthinr.models.ONNXLocationEncoder is ONNXLocationEncoder
+        assert earthinr.models.ONNX_PRESET_SPECS is ONNX_PRESET_SPECS
+        assert earthinr.models.onnx_encoder is onnx_encoder
         assert earthinr.coordbench.CoordConfig is not None
