@@ -4,7 +4,7 @@
 
 """Export and verify dynamic-batch ONNX models for taylor-geospatial/earthinr-zoo.
 
-Exports all 22 location encoders hosted in ``taylor-geospatial/earthinr-zoo`` to
+Exports all 26 location encoders hosted in ``taylor-geospatial/earthinr-zoo`` to
 single-file, self-contained ONNX graphs (opset 18 by default) with dynamic batch
 dimension 0, verifies strict numerical parity against PyTorch via
 ``onnxruntime`` across multiple batch sizes and diverse global coordinates,
@@ -38,6 +38,10 @@ from torch import Tensor, nn
 from earthinr.models._base import LocationEncoder
 from earthinr.models.climplicit import Climplicit_Weights, climplicit
 from earthinr.models.csp import CSP_Weights, csp
+from earthinr.models.geoclosp import GeoCLOSP_Weights, geoclosp
+from earthinr.models.gtloc import GTLoc_Weights, gtloc
+from earthinr.models.hydroloc import HydroLoc_Weights, hydroloc
+from earthinr.models.lesinr import LESINR_Weights, lesinr
 from earthinr.models.mind import MIND_Weights, mind
 from earthinr.models.osmgraphclip import OSMGraphCLIP_Weights, osmgraphclip
 from earthinr.models.rff_capsule import (
@@ -157,6 +161,20 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         'osmgraphclip-a-l10',
         lambda: osmgraphclip(weights=OSMGraphCLIP_Weights.A_L10, device='cpu'),
         256,
+    ),
+    ModelSpec(
+        'le-sinr', lambda: lesinr(weights=LESINR_Weights.DEFAULT, device='cpu'), 256
+    ),
+    ModelSpec('gtloc', lambda: gtloc(weights=GTLoc_Weights.DEFAULT, device='cpu'), 512),
+    ModelSpec(
+        'hydroloc',
+        lambda: hydroloc(weights=HydroLoc_Weights.DEFAULT, device='cpu'),
+        512,
+    ),
+    ModelSpec(
+        'geoclosp-rn',
+        lambda: geoclosp(weights=GeoCLOSP_Weights.RN50_L10, device='cpu'),
+        384,
     ),
 )
 
@@ -734,7 +752,7 @@ def main() -> None:
         nargs='+',
         default=None,
         choices=list(MODEL_SPECS_BY_ID),
-        help='Subset of model IDs to export (defaults to all 22 zoo models).',
+        help='Subset of model IDs to export (defaults to all 26 zoo models).',
     )
     parser.add_argument(
         '--opset',
