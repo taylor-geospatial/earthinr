@@ -1,0 +1,5 @@
+name: hydroloc
+target: earthinr.models.hydroloc.HydroLocLocationEncoder
+kwargs:
+  weights: DEFAULT
+description: HydroLoc Equal-Earth ReSIREN location encoder distilled on the Hydro dataset (512-d, Matryoshka 64/128/256/512).
