@@ -1,0 +1,69 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.12', '3.13', '3.14']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --locked --python ${{ matrix.python-version }} --extra tests
+
+      - name: Run pytest with coverage
+        run: uv run pytest --cov=earthinr --cov-fail-under=100 --cov-report=term-missing
+
+  build:
+    name: Build and smoke-test wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          python-version: '3.13'
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Install wheel into clean venv and smoke-test CLI
+        run: |
+          uv venv --python 3.13 /tmp/earthinr-smoke-venv
+          uv pip install --python /tmp/earthinr-smoke-venv/bin/python dist/*.whl
+          /tmp/earthinr-smoke-venv/bin/earthinr --version
+          /tmp/earthinr-smoke-venv/bin/earthinr models
+          /tmp/earthinr-smoke-venv/bin/earthinr coord --model sinr --dataset air_temp --split both --dry-run

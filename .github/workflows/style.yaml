@@ -1,0 +1,43 @@
+name: Style
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  style:
+    name: Lint, format, and type check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: uv sync --locked --python 3.13 --extra style --extra tests
+
+      - name: Check formatting with ruff
+        run: uv run ruff format --check .
+
+      - name: Check lint with ruff
+        run: uv run ruff check --output-format=github .
+
+      - name: Type check with ty
+        run: uv run ty check --output-format=github
