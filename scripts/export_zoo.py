@@ -505,6 +505,56 @@ def export_csp(
     return results
 
 
+def export_osmgraphclip(
+    api: HfApi,
+    staging: Path,
+    model_id: str,
+    repo_id: str,
+    ckpt_filename: str,
+    *,
+    multiscale: bool,
+) -> dict[str, Any]:
+    rev = resolve_revision(api, repo_id)
+    ckpt_path = hf_hub_download(repo_id, ckpt_filename, revision=rev)
+    ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+    hp = ckpt['hyper_parameters']
+    raw_sd = ckpt['state_dict']
+
+    tensors: dict[str, torch.Tensor] = {}
+    for k, v in raw_sd.items():
+        if 'nnet.' in k:
+            norm_k = 'nnet.' + k.split('nnet.', 1)[1]
+            tensors[norm_k] = v.float() if v.dtype == torch.float64 else v
+
+    assert len(tensors) == 6, (
+        f'Expected 6 OSMGraphCLIP tensors, got {len(tensors)}: {list(tensors)}'
+    )
+    config = {
+        'architecture': 'osmgraphclip',
+        'coord_order': 'lonlat',
+        'multiscale': multiscale,
+        'legendre_polys': int(hp['legendre_polys']),
+        'capacity': int(hp['capacity']),
+        'embed_dim': int(hp['embed_dim']),
+        'output_dim': int(hp['embed_dim']),
+        'num_hidden_layers': int(hp['num_hidden_layers']),
+        'le_type': str(hp['le_type']),
+        'pe_type': str(hp['pe_type']),
+        'harmonics_calculation': str(hp['harmonics_calculation']),
+        'source_repo': repo_id,
+        'source_file': ckpt_filename,
+        'source_revision': rev,
+        'license': 'Apache-2.0',
+        'upstream_url': 'https://github.com/d-michail/osmgraphclip',
+    }
+    return verify_and_save(
+        staging / model_id,
+        tensors,
+        config,
+        metadata={'format': 'pt', 'source_repo': repo_id, 'source_revision': rev},
+    )
+
+
 def _temporal_summary(model_id: str, cfg: dict[str, Any]) -> str:
     if model_id == 'climplicit':
         return (
@@ -592,6 +642,7 @@ This collection aggregates checkpoints released under their respective upstream 
 - **TTE** (`tte`): MIT License — Copyright (c) 2026 Multimodal Vision Research Lab @ WashU. *Tessellating the Earth*, ECCV 2026.
 - **TerraNova** (`terranova-spatial`, `terranova-st`): Weights **CC-BY-4.0**, code Apache-2.0 — Copyright 2026 Carlos Rodriguez-Pardo and Massimo Tavoni. Attribution: cite `arXiv:2607.29527`.
 - **CSP** (`csp-inat`, `csp-fmow`): **Unlicensed** (no `LICENSE` file in `gengchenmai/csp`; contact upstream authors for reuse permissions). Mai et al., *CSP: Self-Supervised Contrastive Spatial Pre-Training for Geospatial-Visual Representations*, ICML 2023 (`arXiv:2305.01118`).
+- **OSMGraphCLIP** (`osmgraphclip-ms-l40`, `osmgraphclip-ms-l10`, `osmgraphclip-a-l40`, `osmgraphclip-a-l10`): Weights **Apache-2.0**, code MIT — Michail et al., *OSMGraphCLIP: Learning Global Location Representations from OpenStreetMap Graphs*, ACM SIGSPATIAL 2026 (`doi:10.1145/3841645.3842950`, `arXiv:2606.08046`).
 """
 
 
@@ -705,6 +756,40 @@ def main() -> None:
 
     print('Exporting csp-inat and csp-fmow...')
     records.extend(export_csp(api, staging, csp_zip=args.csp_zip))
+
+    osmgraphclip_specs = [
+        (
+            'osmgraphclip-ms-l40',
+            'd-michail/OSMGraphCLIP-MS-L40',
+            'osmgraphclip-ms-l40.ckpt',
+            True,
+        ),
+        (
+            'osmgraphclip-ms-l10',
+            'd-michail/OSMGraphCLIP-MS-L10',
+            'osmgraphclip-ms-l10.ckpt',
+            True,
+        ),
+        (
+            'osmgraphclip-a-l40',
+            'd-michail/OSMGraphCLIP-A-L40',
+            'osmgraphclip-a-l40.ckpt',
+            False,
+        ),
+        (
+            'osmgraphclip-a-l10',
+            'd-michail/OSMGraphCLIP-A-L10',
+            'osmgraphclip-a-l10.ckpt',
+            False,
+        ),
+    ]
+    for model_id, repo_id, fname, multiscale in osmgraphclip_specs:
+        print(f'Exporting {model_id} from {repo_id}...')
+        records.append(
+            export_osmgraphclip(
+                api, staging, model_id, repo_id, fname, multiscale=multiscale
+            )
+        )
 
     (staging / 'README.md').write_text(build_readme(records))
     manifest_path = staging / 'manifest.json'
