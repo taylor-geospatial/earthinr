@@ -1,0 +1,122 @@
+[build-system]
+requires = ["uv_build>=0.8"]
+build-backend = "uv_build"
+
+[project]
+name = "earthinr"
+version = "0.1.0"
+description = "Implicit Neural Representations for Earth Observation."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [
+    { name = "Isaac Corley", email = "isaac.a.corley@gmail.com" },
+    { name = "Taylor Geospatial" },
+]
+dependencies = [
+    # filelock 3.13+ required for cross-process atomic result file locking
+    "filelock>=3.13",
+    # huggingface-hub 0.23+ required for hf_hub_download with revision and dataset support
+    "huggingface-hub>=0.23",
+    # lazy-loader 0.4+ required for attach_stub deferred subpackage imports
+    "lazy-loader>=0.4",
+    # numpy 1.26+ required for modern Generator API and Python 3.12+ wheels
+    "numpy>=1.26",
+    # pandas 2.1+ required for PyArrow-backed parquet benchmark tables
+    "pandas>=2.1",
+    # pyarrow 15+ required for reading CoordBench parquet files
+    "pyarrow>=15",
+    # pyyaml 6+ required for SafeLoader YAML configuration parsing
+    "pyyaml>=6",
+    # safetensors 0.4+ required for zero-copy PyTorch tensor checkpoint loading
+    "safetensors>=0.4",
+    # scikit-learn 1.4+ required for probe baselines and spatial/stratified splitting
+    "scikit-learn>=1.4",
+    # scipy 1.11+ required for spatial KDTree queries and spherical harmonic verification
+    "scipy>=1.11",
+    # torch 2.2+ required for Python 3.12+ wheels and stable inference_mode/linalg APIs
+    "torch>=2.2",
+]
+
+[project.optional-dependencies]
+products = [
+    # numcodecs 0.13+ required for Zarr v3 codec compatibility
+    "numcodecs>=0.13",
+    # pyproj 3.6+ required for CRS reprojection of embedding raster products
+    "pyproj>=3.6",
+    # requests 2.31+ required for HTTP metadata and tile manifest fetches
+    "requests>=2.31",
+    # s3fs 2024+ required for anonymous S3 Zarr mosaic access
+    "s3fs>=2024",
+    # zarr 3+ required for AlphaEarth and TESSERA v1.1 Zarr embedding stores
+    "zarr>=3",
+]
+knn = [
+    # faissknn 0.4.2+ required for optional FAISS-accelerated k-NN probing
+    "faissknn>=0.4.2",
+]
+style = [
+    # ruff 0.14+ required for CPY copyright checks and modern Python 3.12 lint rules
+    "ruff>=0.14",
+    # ty 0.0.1a23+ required for static type checking across src and tests
+    "ty>=0.0.1a23",
+]
+tests = [
+    # pytest 8+ required for strict config, markers, and MonkeyPatch test isolation
+    "pytest>=8",
+    # pytest-cov 5+ required for branch coverage reporting
+    "pytest-cov>=5",
+    # pytest-socket 0.7+ required to disable accidental network access in unit tests
+    "pytest-socket>=0.7",
+]
+all = [
+    "earthinr[products,knn,style,tests]",
+]
+
+[project.scripts]
+earthinr = "earthinr.cli:main"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.format]
+docstring-code-format = true
+quote-style = "single"
+skip-magic-trailing-comma = true
+
+[tool.ruff.lint]
+extend-select = ["ANN", "B", "CPY", "D", "I", "N", "PT", "RUF", "SIM", "UP"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["ANN", "D"]
+"tests/**" = ["D"]
+
+[tool.ruff.lint.flake8-copyright]
+notice-rgx = "# Copyright \\(c\\) Taylor Geospatial\\. All rights reserved\\.\\n# Licensed under the MIT License\\."
+
+[tool.ruff.lint.isort]
+known-first-party = ["earthinr"]
+split-on-trailing-comma = false
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ty.src]
+include = ["src", "tests"]
+
+[tool.pytest.ini_options]
+addopts = "-m 'not slow' --disable-socket --strict-config --strict-markers"
+markers = [
+    "slow: marks tests as slow or requiring network access (deselect with '-m \"not slow\"')",
+]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["earthinr"]
+
+[tool.coverage.report]
+exclude_also = ["@overload", "if TYPE_CHECKING:"]
+show_missing = true

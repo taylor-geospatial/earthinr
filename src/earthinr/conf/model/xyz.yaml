@@ -1,0 +1,4 @@
+name: xyz
+target: earthinr.models.encoders.XYZLocationEncoder
+kwargs: {}
+description: Unit-sphere 3D Cartesian (x, y, z) coordinate encoder (3-d).

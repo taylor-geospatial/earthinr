@@ -1,0 +1,6 @@
+name: mind-head
+target: earthinr.models.mind.MINDLocationEncoder
+kwargs:
+  weights: MIND
+  feature: head
+description: MIND linear projection head (64-d AEF-aligned).
