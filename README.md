@@ -62,6 +62,10 @@ All location-encoder-only checkpoints are hosted in [`taylor-geospatial/earthinr
 | `terranova-st` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Optional `year` 1900–2035 (`2020`) | 256 | `taylor-geospatial/earthinr-zoo` | 614.9 MB | CC-BY-4.0 |
 | `csp-inat` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 0.79 MB | Unlicensed (pending author confirmation) |
 | `csp-fmow` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 0.79 MB | Unlicensed (pending author confirmation) |
+| `osmgraphclip` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 4.86 MB | Apache-2.0 |
+| `osmgraphclip-ms-l10` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 1.78 MB | Apache-2.0 |
+| `osmgraphclip-a-l40` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 4.86 MB | Apache-2.0 |
+| `osmgraphclip-a-l10` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 1.78 MB | Apache-2.0 |
 | `aef` | Embedding Product | `(lon, lat)` deg, `(B, 2)` | Optional `year` 2017–2025 (`2021`) | 64 | Zarr S3 (`tge-labs/aef-mosaic`) | Streams on demand | CC-BY-4.0 |
 | `tessera` | Embedding Product | `(lon, lat)` deg, `(B, 2)` | Optional `year` 2017–2025 (`2021`) | 128 | Zarr S3 (`tessera/v1.1-dclimate`) | Streams on demand | CC-BY-4.0 |
 
@@ -77,7 +81,7 @@ import torch
 
 from earthinr.models import SatCLIPLocationEncoder, get_model, list_models
 
-# Inspect all 29 registered presets (no heavy imports required)
+# Inspect all 33 registered presets (no heavy imports required)
 print(list_models())
 
 # Load via registry preset or class constructor

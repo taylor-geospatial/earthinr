@@ -1,0 +1,5 @@
+name: osmgraphclip
+target: earthinr.models.osmgraphclip.OSMGraphCLIPLocationEncoder
+kwargs:
+  weights: MS_L40
+description: OSMGraphCLIP MS-L40 multiscale spherical harmonic SirenNet location encoder (256-d).

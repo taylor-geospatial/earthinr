@@ -8,6 +8,7 @@ from . import (
     csp,
     encoders,
     mind,
+    osmgraphclip,
     products,
     registry,
     rff_capsule,
@@ -48,6 +49,7 @@ from .mind import (
     SIRENLayer,
     load_mind,
 )
+from .osmgraphclip import OSMGraphCLIP_Weights, OSMGraphCLIPLocationEncoder
 from .products import (
     AEF_MOSAIC_URL,
     AEF_YEARS,
@@ -140,6 +142,8 @@ __all__: tuple[str, ...] = (
     'MultiLayerFeedForwardNN',
     'MultiResolutionHashEncoding',
     'NeRFLocationEncoder',
+    'OSMGraphCLIPLocationEncoder',
+    'OSMGraphCLIP_Weights',
     'RFFCapsule',
     'ReSIRENLocationEncoder',
     'ResLayer',
@@ -188,6 +192,7 @@ __all__: tuple[str, ...] = (
     'list_models',
     'load_mind',
     'mind',
+    'osmgraphclip',
     'products',
     'registry',
     'resolve_model_preset',

@@ -1,0 +1,5 @@
+name: osmgraphclip-a-l10
+target: earthinr.models.osmgraphclip.OSMGraphCLIPLocationEncoder
+kwargs:
+  weights: A_L10
+description: OSMGraphCLIP A-L10 single-scale spherical harmonic SirenNet location encoder (256-d).
