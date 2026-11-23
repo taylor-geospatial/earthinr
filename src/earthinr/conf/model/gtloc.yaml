@@ -1,0 +1,5 @@
+name: gtloc
+target: earthinr.models.gtloc.GTLocLocationEncoder
+kwargs:
+  weights: DEFAULT
+description: GT-Loc Equal-Earth multi-scale RFF location encoder (512-d).
