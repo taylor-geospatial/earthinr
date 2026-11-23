@@ -1,0 +1,5 @@
+name: geoclip
+target: earthinr.models.rff_capsule.GeoCLIPLocationEncoder
+kwargs:
+  weights: DEFAULT
+description: GeoCLIP Equal-Earth multi-scale RFF location encoder (512-d).

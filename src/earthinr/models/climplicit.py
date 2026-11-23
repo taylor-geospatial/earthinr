@@ -338,10 +338,14 @@ class ClimplicitNet(nn.Module):
             ]
             return torch.cat(outputs, dim=-1)
 
-        angle = month.to(dtype=loc.dtype, device=loc.device).unsqueeze(-1) * (
+        angle = month.to(dtype=torch.float64, device=loc.device).unsqueeze(-1) * (
             2.0 * math.pi / 12.0
         )
-        return self._encode_month_features(loc, torch.sin(angle), torch.cos(angle))
+        return self._encode_month_features(
+            loc,
+            torch.sin(angle).to(dtype=loc.dtype),
+            torch.cos(angle).to(dtype=loc.dtype),
+        )
 
 
 class Climplicit_Weights(WeightsEnum):  # noqa: N801

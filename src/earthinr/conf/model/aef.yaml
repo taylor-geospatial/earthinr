@@ -1,0 +1,6 @@
+name: aef
+target: earthinr.models.products.AlphaEarthLocationEncoder
+kwargs:
+  default_year: 2021
+  impute_nan: true
+description: AlphaEarth Foundations 10m Zarr embedding mosaic lookup (64-d).

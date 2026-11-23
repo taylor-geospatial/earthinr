@@ -90,6 +90,7 @@ extend-select = ["ANN", "B", "CPY", "D", "I", "N", "PT", "RUF", "SIM", "UP"]
 ignore = ["ANN401"]
 
 [tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["ANN", "D"]
 "tests/**" = ["D"]
 
 [tool.ruff.lint.flake8-copyright]

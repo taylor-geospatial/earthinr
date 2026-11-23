@@ -1,0 +1,5 @@
+name: satclip
+target: earthinr.models.satclip.SatCLIPLocationEncoder
+kwargs:
+  weights: VIT16_L40
+description: SatCLIP ViT-16 L=40 spherical harmonic SirenNet location encoder (256-d).

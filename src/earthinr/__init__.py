@@ -3,8 +3,10 @@
 
 """EarthINR: Implicit Neural Representations for Earth Observation."""
 
-from . import coordbench, models, probes
+import lazy_loader as lazy
 
 __version__ = '0.1.0'
 
-__all__ = ('__version__', 'coordbench', 'models', 'probes')
+__getattr__, __dir__, _lazy_all = lazy.attach_stub(__name__, __file__)
+
+__all__ = tuple(sorted({'__version__', *_lazy_all}))

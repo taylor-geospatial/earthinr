@@ -3,6 +3,8 @@
 
 """Coordinate and implicit neural representation models."""
 
-from ._base import LocationEncoder, Weights, WeightsEnum
+import lazy_loader as lazy
 
-__all__ = ('LocationEncoder', 'Weights', 'WeightsEnum')
+__getattr__, __dir__, _lazy_all = lazy.attach_stub(__name__, __file__)
+
+__all__ = tuple(sorted(_lazy_all))

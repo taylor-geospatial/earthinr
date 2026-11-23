@@ -1,0 +1,5 @@
+name: sled
+target: earthinr.models.rff_capsule.SLEDLocationEncoder
+kwargs:
+  weights: S1_S2_LS
+description: SLED Sentinel-1/Sentinel-2/Landsat location encoder (768-d).

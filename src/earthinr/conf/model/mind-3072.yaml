@@ -1,0 +1,7 @@
+name: mind-3072
+target: earthinr.models.mind.MINDLocationEncoder
+kwargs:
+  weights: MIND
+  feature: pooled
+  dim: 3072
+description: MIND multi-teacher distilled ReSIREN encoder (full 3072-d trunk).

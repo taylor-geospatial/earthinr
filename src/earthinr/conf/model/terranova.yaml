@@ -1,0 +1,6 @@
+name: terranova
+target: earthinr.models.terranova.TerraNovaLocationEncoder
+kwargs:
+  weights: SPATIAL
+  space: spatial
+description: TerraNova spatial hybrid WIRE + hash-grid location encoder (256-d).

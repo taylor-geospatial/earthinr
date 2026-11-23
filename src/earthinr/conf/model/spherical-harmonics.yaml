@@ -1,0 +1,5 @@
+name: spherical-harmonics
+target: earthinr.models.encoders.SphericalHarmonicLocationEncoder
+kwargs:
+  degree: 3
+description: Real orthonormal spherical harmonics up to degree 3 (16-d).
