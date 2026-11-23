@@ -4,7 +4,7 @@
 
 """Export and verify dynamic-batch ONNX models for taylor-geospatial/earthinr-zoo.
 
-Exports all 18 location encoders hosted in ``taylor-geospatial/earthinr-zoo`` to
+Exports all 22 location encoders hosted in ``taylor-geospatial/earthinr-zoo`` to
 single-file, self-contained ONNX graphs (opset 18 by default) with dynamic batch
 dimension 0, verifies strict numerical parity against PyTorch via
 ``onnxruntime`` across multiple batch sizes and diverse global coordinates,
@@ -39,6 +39,7 @@ from earthinr.models._base import LocationEncoder
 from earthinr.models.climplicit import Climplicit_Weights, climplicit
 from earthinr.models.csp import CSP_Weights, csp
 from earthinr.models.mind import MIND_Weights, mind
+from earthinr.models.osmgraphclip import OSMGraphCLIP_Weights, osmgraphclip
 from earthinr.models.rff_capsule import (
     GAIR_Weights,
     GeoCLIP_Weights,
@@ -137,6 +138,26 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
     ),
     ModelSpec('csp-inat', lambda: csp(weights=CSP_Weights.INAT, device='cpu'), 256),
     ModelSpec('csp-fmow', lambda: csp(weights=CSP_Weights.FMOW, device='cpu'), 256),
+    ModelSpec(
+        'osmgraphclip-ms-l40',
+        lambda: osmgraphclip(weights=OSMGraphCLIP_Weights.MS_L40, device='cpu'),
+        256,
+    ),
+    ModelSpec(
+        'osmgraphclip-ms-l10',
+        lambda: osmgraphclip(weights=OSMGraphCLIP_Weights.MS_L10, device='cpu'),
+        256,
+    ),
+    ModelSpec(
+        'osmgraphclip-a-l40',
+        lambda: osmgraphclip(weights=OSMGraphCLIP_Weights.A_L40, device='cpu'),
+        256,
+    ),
+    ModelSpec(
+        'osmgraphclip-a-l10',
+        lambda: osmgraphclip(weights=OSMGraphCLIP_Weights.A_L10, device='cpu'),
+        256,
+    ),
 )
 
 MODEL_SPECS_BY_ID: dict[str, ModelSpec] = {spec.model_id: spec for spec in MODEL_SPECS}
@@ -713,7 +734,7 @@ def main() -> None:
         nargs='+',
         default=None,
         choices=list(MODEL_SPECS_BY_ID),
-        help='Subset of model IDs to export (defaults to all 18 zoo models).',
+        help='Subset of model IDs to export (defaults to all 22 zoo models).',
     )
     parser.add_argument(
         '--opset',

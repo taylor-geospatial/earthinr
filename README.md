@@ -31,7 +31,7 @@ pip install 'earthinr[knn]'
 
 ## Model & Input/Output Contract Table
 
-All location-encoder-only checkpoints are hosted in [`taylor-geospatial/earthinr-zoo`](https://huggingface.co/taylor-geospatial/earthinr-zoo) (with MIND hosted at [`taylor-geospatial/MIND`](https://huggingface.co/taylor-geospatial/MIND)) and reproducible via [`scripts/export_zoo.py`](scripts/export_zoo.py).
+All 22 location-encoder-only checkpoints are hosted in [`taylor-geospatial/earthinr-zoo`](https://huggingface.co/taylor-geospatial/earthinr-zoo) as both stripped `<model_id>/model.safetensors` weights and self-contained `<model_id>/model.onnx` graphs (opset 18; opset 20 for `osmgraphclip-*`, dynamic batch `coords: (batch, 2)` — plus `year: (batch,)` for `terranova-st` — verified with `onnxruntime`), reproducible via [`scripts/export_zoo.py`](scripts/export_zoo.py) and [`scripts/export_onnx.py`](scripts/export_onnx.py). MIND remains hosted at [`taylor-geospatial/MIND`](https://huggingface.co/taylor-geospatial/MIND) (`mind.safetensors` and `mind.onnx`).
 
 | Preset | Family | Spatial Input | Temporal Input (Default) | Output `embed_dim` | Weight Source | Stripped Size | License |
 |---|---|---|---|---:|---|---:|---|
