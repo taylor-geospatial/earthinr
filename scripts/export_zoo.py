@@ -29,6 +29,9 @@ ZOO_REPO_ID = 'taylor-geospatial/earthinr-zoo'
 TERRANOVA_REVISION = 'ada28cc009cd52da6949981dce8819fd3ae7c8c0'
 CSP_ZIP_URL = 'https://www.dropbox.com/s/qxr644rj1qxekn2/model_dir.zip?dl=1'
 CSP_LICENSE = 'unlicensed (contact upstream authors; Mai et al., ICML 2023)'
+LESINR_GDRIVE_ID = '1Gkjd--w1LgI64Gpk5w6d_NaivmyzYq35'
+GTLOC_GDRIVE_ID = '170wGyCYLSF3DWOvITIAbtN1OkmDlS4v6'
+_GITHUB_SOURCE_REPOS = {'gengchenmai/csp', 'cvl-umass/le-sinr', 'dshatwell23/gtloc'}
 
 
 def sha256_file(path: Path) -> str:
@@ -555,6 +558,196 @@ def export_osmgraphclip(
     )
 
 
+def _download_gdrive(file_id: str, dest: Path) -> Path:
+    """Download a Google Drive file via direct export URL if not already present."""
+    if dest.exists():
+        return dest
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    url = f'https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t'
+    tmp = dest.with_suffix(dest.suffix + '.tmp')
+    urllib.request.urlretrieve(url, tmp)
+    tmp.rename(dest)
+    return dest
+
+
+def export_lesinr(staging: Path, lesinr_ckpt: Path | None = None) -> dict[str, Any]:
+    """Export LE-SINR position-only checkpoint from local file or Google Drive."""
+    raw_dir = staging / '_lesinr_raw'
+    ckpt_path = (
+        lesinr_ckpt
+        if lesinr_ckpt is not None
+        else _download_gdrive(LESINR_GDRIVE_ID, raw_dir / 'le_sinr_pos.pt')
+    )
+    payload = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+    state_dict = (
+        payload.get('state_dict', payload) if isinstance(payload, dict) else payload
+    )
+
+    tensors: dict[str, torch.Tensor] = {}
+    for k, v in state_dict.items():
+        clean = k.removeprefix('pos_enc.')
+        if clean.startswith(('feats.', 'class_emb.')):
+            tensors[clean] = v.float()
+
+    assert len(tensors) == 19, (
+        f'Expected 19 LE-SINR tensors, got {len(tensors)}: {list(tensors)}'
+    )
+    config = {
+        'architecture': 'le-sinr',
+        'coord_order': 'lonlat',
+        'num_inputs': 4,
+        'num_filts': 256,
+        'depth': 4,
+        'embed_dim': 256,
+        'output_dim': 256,
+        'has_class_emb': True,
+        'source_repo': 'cvl-umass/le-sinr',
+        'source_file': f'gdrive:{LESINR_GDRIVE_ID}',
+        'license': 'MIT',
+        'upstream_url': 'https://github.com/cvl-umass/le-sinr',
+    }
+    return verify_and_save(
+        staging / 'le-sinr',
+        tensors,
+        config,
+        metadata={
+            'format': 'pt',
+            'source_repo': 'cvl-umass/le-sinr',
+            'source_file': f'gdrive:{LESINR_GDRIVE_ID}',
+        },
+    )
+
+
+def export_gtloc(staging: Path, gtloc_ckpt: Path | None = None) -> dict[str, Any]:
+    """Export GT-Loc spatial location encoder from local file or Google Drive."""
+    raw_dir = staging / '_gtloc_raw'
+    ckpt_path = (
+        gtloc_ckpt
+        if gtloc_ckpt is not None
+        else _download_gdrive(GTLOC_GDRIVE_ID, raw_dir / 'gtloc.pt')
+    )
+    payload = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+    state_dict = (
+        payload.get('state_dict', payload) if isinstance(payload, dict) else payload
+    )
+
+    tensors: dict[str, torch.Tensor] = {}
+    for k, v in state_dict.items():
+        clean = k.removeprefix('location_encoder.')
+        if clean.startswith('LocEnc'):
+            tensors[clean] = v.float()
+
+    assert len(tensors) == 27, (
+        f'Expected 27 GT-Loc tensors, got {len(tensors)}: {list(tensors)}'
+    )
+    config = {
+        'architecture': 'gtloc',
+        'coord_order': 'latlon',
+        'sigma': [1, 16, 256],
+        'input_size': 2,
+        'encoded_size': 256,
+        'hidden_dim': 1024,
+        'output_dim': 512,
+        'source_repo': 'dshatwell23/gtloc',
+        'source_file': f'gdrive:{GTLOC_GDRIVE_ID}',
+        'license': 'CC-BY-NC-4.0',
+        'upstream_url': 'https://github.com/dshatwell23/gtloc',
+    }
+    return verify_and_save(
+        staging / 'gtloc',
+        tensors,
+        config,
+        metadata={
+            'format': 'pt',
+            'source_repo': 'dshatwell23/gtloc',
+            'source_file': f'gdrive:{GTLOC_GDRIVE_ID}',
+        },
+    )
+
+
+def export_hydroloc(api: HfApi, staging: Path) -> dict[str, Any]:
+    """Export HydroLoc ReSIREN location encoder from isaaccorley/hydroloc."""
+    repo_id = 'isaaccorley/hydroloc'
+    rev = resolve_revision(api, repo_id)
+    raw_tensors = load_file(hf_hub_download(repo_id, 'model.safetensors', revision=rev))
+    tensors = {
+        k: v.float()
+        for k, v in raw_tensors.items()
+        if k.startswith(('first.linear.', 'blocks.'))
+    }
+    assert len(tensors) == 10, (
+        f'Expected 10 HydroLoc tensors, got {len(tensors)}: {list(tensors)}'
+    )
+    config = {
+        'architecture': 'hydroloc',
+        'coord_order': 'lonlat',
+        'projection': 'equal_earth',
+        'variant': 'siren',
+        'embed_dim': 512,
+        'output_dim': 512,
+        'depth': 4,
+        'w0_first': 30.0,
+        'w0': 1.0,
+        'matryoshka_dims': [64, 128, 256, 512],
+        'teachers': {'dino': 1024, 'olmo': 768},
+        'source_dataset': 'isaaccorley/hydro',
+        'source_repo': repo_id,
+        'source_file': 'model.safetensors',
+        'source_revision': rev,
+        'license': 'Apache-2.0',
+        'upstream_url': 'https://huggingface.co/isaaccorley/hydroloc',
+    }
+    return verify_and_save(
+        staging / 'hydroloc',
+        tensors,
+        config,
+        metadata={'format': 'pt', 'source_repo': repo_id, 'source_revision': rev},
+    )
+
+
+def export_geoclosp(api: HfApi, staging: Path) -> dict[str, Any]:
+    """Export GeoCLOSP-RN location encoder + projection from DarthReca/GeoCLOSP-RN."""
+    repo_id = 'DarthReca/GeoCLOSP-RN'
+    rev = resolve_revision(api, repo_id)
+    raw_tensors = load_file(hf_hub_download(repo_id, 'model.safetensors', revision=rev))
+    tensors: dict[str, torch.Tensor] = {}
+    for k, v in raw_tensors.items():
+        if k.startswith('location_encoder.nnet.'):
+            tensors[f'nnet.{k.removeprefix("location_encoder.nnet.")}'] = v.float()
+        elif k.startswith('location_projection.'):
+            tensors[f'projection.{k.removeprefix("location_projection.")}'] = v.float()
+
+    assert len(tensors) == 8, (
+        f'Expected 8 GeoCLOSP-RN tensors, got {len(tensors)}: {list(tensors)}'
+    )
+    config = {
+        'architecture': 'geoclosp',
+        'coord_order': 'lonlat',
+        'legendre_polys': 10,
+        'capacity': 512,
+        'location_dim': 256,
+        'embed_dim': 384,
+        'output_dim': 384,
+        'num_hidden_layers': 2,
+        'le_type': 'sphericalharmonics',
+        'pe_type': 'siren',
+        'harmonics_calculation': 'analytic',
+        'l2_normalize': True,
+        'paper_url': 'https://arxiv.org/abs/2507.10403',
+        'source_repo': repo_id,
+        'source_file': 'model.safetensors',
+        'source_revision': rev,
+        'license': 'CreativeML-OpenRAIL-M',
+        'upstream_url': 'https://github.com/DarthReca/closp',
+    }
+    return verify_and_save(
+        staging / 'geoclosp-rn',
+        tensors,
+        config,
+        metadata={'format': 'pt', 'source_repo': repo_id, 'source_revision': rev},
+    )
+
+
 def _temporal_summary(model_id: str, cfg: dict[str, Any]) -> str:
     if model_id == 'climplicit':
         return (
@@ -573,7 +766,7 @@ def build_readme(records: list[dict[str, Any]]) -> str:
         src_repo = cfg['source_repo']
         src_link = (
             f'[{src_repo}]({cfg["upstream_url"]})'
-            if src_repo == 'gengchenmai/csp'
+            if src_repo in _GITHUB_SOURCE_REPOS
             else f'[{src_repo}](https://huggingface.co/{src_repo})'
         )
         temporal = _temporal_summary(rec['model_id'], cfg)
@@ -630,7 +823,7 @@ All `earthinr` encoders expose a universal `(lon, lat)` WGS84 degrees public API
 
 ## Licenses & Attribution
 
-This collection aggregates checkpoints released under their respective upstream licenses (**MIT**, **Apache-2.0**, **CC-BY-4.0**, plus **unlicensed** for CSP). Please respect the license and attribution terms of each individual model you use:
+This collection aggregates checkpoints released under their respective upstream licenses (**MIT**, **Apache-2.0**, **CC-BY-4.0**, **CC-BY-NC-4.0**, **CreativeML-OpenRAIL-M**, plus **unlicensed** for CSP). Please respect the license and attribution terms of each individual model you use:
 
 - **SatCLIP** (`satclip-*`): MIT License — Copyright (c) Microsoft Corporation. Klemmer et al., *SatCLIP: Global, General-Purpose Location Embeddings with Satellite Imagery*, AAAI 2025 (`arXiv:2311.17179`).
 - **GeoCLIP** (`geoclip`): MIT License — Copyright (c) 2024 Vicente Vivanco (RFF adapted from `jmclong/random-fourier-features-pytorch`, MIT). Vivanco Cepeda et al., *GeoCLIP: Clip-Inspired Alignment between Locations and Images for Effective Worldwide Geo-localization*, NeurIPS 2023 (`arXiv:2309.16020`).
@@ -643,6 +836,10 @@ This collection aggregates checkpoints released under their respective upstream 
 - **TerraNova** (`terranova-spatial`, `terranova-st`): Weights **CC-BY-4.0**, code Apache-2.0 — Copyright 2026 Carlos Rodriguez-Pardo and Massimo Tavoni. Attribution: cite `arXiv:2607.29527`.
 - **CSP** (`csp-inat`, `csp-fmow`): **Unlicensed** (no `LICENSE` file in `gengchenmai/csp`; contact upstream authors for reuse permissions). Mai et al., *CSP: Self-Supervised Contrastive Spatial Pre-Training for Geospatial-Visual Representations*, ICML 2023 (`arXiv:2305.01118`).
 - **OSMGraphCLIP** (`osmgraphclip-ms-l40`, `osmgraphclip-ms-l10`, `osmgraphclip-a-l40`, `osmgraphclip-a-l10`): Weights **Apache-2.0**, code MIT — Michail et al., *OSMGraphCLIP: Learning Global Location Representations from OpenStreetMap Graphs*, ACM SIGSPATIAL 2026 (`doi:10.1145/3841645.3842950`, `arXiv:2606.08046`).
+- **LE-SINR** (`le-sinr`): MIT License — Hamilton et al., *Combining Observational Data and Language for Species Range Estimation*, NeurIPS 2024 (`arXiv:2410.10931`).
+- **GT-Loc** (`gtloc`): **CC-BY-NC-4.0** (non-commercial) — Shatwell et al., *GT-Loc: A Global Geotemporal Location Encoder*, ICCV 2025 Oral (`arXiv:2507.10473`).
+- **HydroLoc** (`hydroloc`): Apache-2.0 — Isaac Corley, trained on the [`isaaccorley/hydro`](https://huggingface.co/datasets/isaaccorley/hydro) dataset (no associated paper; upstream weights at [`isaaccorley/hydroloc`](https://huggingface.co/isaaccorley/hydroloc)).
+- **GeoCLOSP-RN** (`geoclosp-rn`): **CreativeML-OpenRAIL-M** — Cambrin et al., *CLOSP: Contrastive Language-Observation-Space Pretraining* (`arXiv:2507.10403`).
 """
 
 
@@ -654,6 +851,18 @@ def main() -> None:
         type=Path,
         default=None,
         help='Optional local path to CSP model_dir.zip',
+    )
+    parser.add_argument(
+        '--lesinr-ckpt',
+        type=Path,
+        default=None,
+        help='Optional local path to LE-SINR position-only .pt checkpoint',
+    )
+    parser.add_argument(
+        '--gtloc-ckpt',
+        type=Path,
+        default=None,
+        help='Optional local path to GT-Loc gtloc.pt checkpoint',
     )
     parser.add_argument(
         '--upload', action='store_true', help='Create repo and upload staged files'
@@ -791,6 +1000,18 @@ def main() -> None:
             )
         )
 
+    print('Exporting le-sinr...')
+    records.append(export_lesinr(staging, lesinr_ckpt=args.lesinr_ckpt))
+
+    print('Exporting gtloc...')
+    records.append(export_gtloc(staging, gtloc_ckpt=args.gtloc_ckpt))
+
+    print('Exporting hydroloc...')
+    records.append(export_hydroloc(api, staging))
+
+    print('Exporting geoclosp-rn...')
+    records.append(export_geoclosp(api, staging))
+
     (staging / 'README.md').write_text(build_readme(records))
     manifest_path = staging / 'manifest.json'
     manifest_path.write_text(json.dumps(records, indent=2) + '\n')
@@ -815,9 +1036,13 @@ def main() -> None:
                 'manifest.json',
                 '_csp_raw',
                 '_csp_raw/*',
+                '_lesinr_raw',
+                '_lesinr_raw/*',
+                '_gtloc_raw',
+                '_gtloc_raw/*',
                 '__pycache__/*',
             ],
-            commit_message='Upload initial EarthINR location-encoder-only safetensors zoo (18 models)',
+            commit_message=f'Upload EarthINR location-encoder-only safetensors zoo ({len(records)} models)',
         )
         print(f'Uploaded cleanly to https://huggingface.co/{args.repo_id}')
 

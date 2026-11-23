@@ -27,6 +27,10 @@ EXPECTED_PRESETS: tuple[str, ...] = (
     'csp-inat',
     'gair',
     'geoclip',
+    'geoclosp',
+    'gtloc',
+    'hydroloc',
+    'le-sinr',
     'mind',
     'mind-3072',
     'mind-head',
@@ -178,6 +182,10 @@ class TestPackagedPresets:
             'osmgraphclip-ms-l10',
             'osmgraphclip-a-l40',
             'osmgraphclip-a-l10',
+            'le-sinr',
+            'gtloc',
+            'hydroloc',
+            'geoclosp',
         ],
     )
     def test_neural_presets_build_with_uninitialized_weights(self, name: str) -> None:

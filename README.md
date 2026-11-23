@@ -25,13 +25,13 @@ pip install 'earthinr[knn]'
 
 ## Universal Input/Output Contract
 
-- **Spatial input**: Every `LocationEncoder` accepts `(lon, lat)` coordinates in **WGS84 degrees** (`EPSG:4326` / GeoJSON order) with dynamic batch shape `(B, 2)` in `forward(coords, year=None, month=None)` and 1D arrays `(lon, lat)` in `encode(lon, lat, year=None, month=None)`. Models whose upstream weights expect `(lat, lon)` (MIND, GeoCLIP, TaxaBind, SLED, TTE) handle the swap internally.
+- **Spatial input**: Every `LocationEncoder` accepts `(lon, lat)` coordinates in **WGS84 degrees** (`EPSG:4326` / GeoJSON order) with dynamic batch shape `(B, 2)` in `forward(coords, year=None, month=None)` and 1D arrays `(lon, lat)` in `encode(lon, lat, year=None, month=None)`. Models whose upstream weights expect `(lat, lon)` (MIND, GeoCLIP, TaxaBind, SLED, TTE, GT-Loc) handle the swap internally.
 - **Temporal input**: Optional `year` (and `month` for Climplicit) are supported directly on `forward` / `encode` with explicit defaults documented below.
 - **Output**: `float32` embeddings of shape `(B, embed_dim)`.
 
 ## Model & Input/Output Contract Table
 
-All 22 location-encoder-only checkpoints are hosted in [`taylor-geospatial/earthinr-zoo`](https://huggingface.co/taylor-geospatial/earthinr-zoo) as both stripped `<model_id>/model.safetensors` weights and self-contained `<model_id>/model.onnx` graphs (opset 18; opset 20 for `osmgraphclip-*`, dynamic batch `coords: (batch, 2)` — plus `year: (batch,)` for `terranova-st` — verified with `onnxruntime`), reproducible via [`scripts/export_zoo.py`](scripts/export_zoo.py) and [`scripts/export_onnx.py`](scripts/export_onnx.py). MIND remains hosted at [`taylor-geospatial/MIND`](https://huggingface.co/taylor-geospatial/MIND) (`mind.safetensors` and `mind.onnx`).
+All 26 location-encoder-only checkpoints are hosted in [`taylor-geospatial/earthinr-zoo`](https://huggingface.co/taylor-geospatial/earthinr-zoo) as both stripped `<model_id>/model.safetensors` weights and self-contained `<model_id>/model.onnx` graphs (opset 18; opset 20 for `osmgraphclip-*`, dynamic batch `coords: (batch, 2)` — plus `year: (batch,)` for `terranova-st` — verified with `onnxruntime`), reproducible via [`scripts/export_zoo.py`](scripts/export_zoo.py) and [`scripts/export_onnx.py`](scripts/export_onnx.py). MIND remains hosted at [`taylor-geospatial/MIND`](https://huggingface.co/taylor-geospatial/MIND) (`mind.safetensors` and `mind.onnx`). For upcoming and requested encoders not yet integrated, see [docs/CANDIDATE_MODELS.md](docs/CANDIDATE_MODELS.md).
 
 | Preset | Family | Spatial Input | Temporal Input (Default) | Output `embed_dim` | Weight Source | Stripped Size | License |
 |---|---|---|---|---:|---|---:|---|
@@ -66,10 +66,14 @@ All 22 location-encoder-only checkpoints are hosted in [`taylor-geospatial/earth
 | `osmgraphclip-ms-l10` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 1.78 MB | Apache-2.0 |
 | `osmgraphclip-a-l40` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 4.86 MB | Apache-2.0 |
 | `osmgraphclip-a-l10` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 1.78 MB | Apache-2.0 |
+| `le-sinr` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 256 | `taylor-geospatial/earthinr-zoo` | 2.37 MB | MIT |
+| `gtloc` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 512 | `taylor-geospatial/earthinr-zoo` | 37.8 MB | CC-BY-NC-4.0 |
+| `hydroloc` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 512 (MRL 64/128/256/512) | `taylor-geospatial/earthinr-zoo` | 4.21 MB | Apache-2.0 |
+| `geoclosp` | Neural INR | `(lon, lat)` deg, `(B, 2)` | Time-invariant | 384 | `taylor-geospatial/earthinr-zoo` | 2.18 MB | CreativeML-OpenRAIL-M |
 | `aef` | Embedding Product | `(lon, lat)` deg, `(B, 2)` | Optional `year` 2017–2025 (`2021`) | 64 | Zarr S3 (`tge-labs/aef-mosaic`) | Streams on demand | CC-BY-4.0 |
 | `tessera` | Embedding Product | `(lon, lat)` deg, `(B, 2)` | Optional `year` 2017–2025 (`2021`) | 128 | Zarr S3 (`tessera/v1.1-dclimate`) | Streams on demand | CC-BY-4.0 |
 
-> **License note**: Code in this repository is MIT-licensed. Individual pretrained checkpoints carry their respective upstream licenses (including CC-BY-4.0 attribution for Climplicit, TerraNova, AlphaEarth, and TESSERA). `csp-inat` and `csp-fmow` weights originate from the upstream CSP release (Mai et al., ICML 2023) without an explicit license file and are marked unlicensed pending author confirmation.
+> **License & attribution note**: Code in this repository is MIT-licensed. Individual pretrained checkpoints carry their respective upstream licenses (including CC-BY-4.0 attribution for Climplicit, TerraNova, AlphaEarth, and TESSERA; **CC-BY-NC-4.0** non-commercial for GT-Loc; **CreativeML-OpenRAIL-M** for GeoCLOSP-RN; MIT for LE-SINR; and Apache-2.0 for HydroLoc, trained by Isaac Corley on the [`isaaccorley/hydro`](https://huggingface.co/datasets/isaaccorley/hydro) dataset with no associated paper). `csp-inat` and `csp-fmow` weights originate from the upstream CSP release (Mai et al., ICML 2023) without an explicit license file and are marked unlicensed pending author confirmation.
 
 ## Python API Quickstart
 
@@ -81,7 +85,7 @@ import torch
 
 from earthinr.models import SatCLIPLocationEncoder, get_model, list_models
 
-# Inspect all 33 registered presets (no heavy imports required)
+# Inspect all 37 registered presets (no heavy imports required)
 print(list_models())
 
 # Load via registry preset or class constructor
