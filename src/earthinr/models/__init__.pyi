@@ -12,6 +12,7 @@ from . import (
     hydroloc,
     lesinr,
     mind,
+    onnx,
     osmgraphclip,
     products,
     registry,
@@ -57,6 +58,7 @@ from .mind import (
     SIRENLayer,
     load_mind,
 )
+from .onnx import ONNX_PRESET_SPECS, ONNXLocationEncoder, onnx_encoder
 from .osmgraphclip import OSMGraphCLIP_Weights, OSMGraphCLIPLocationEncoder
 from .products import (
     AEF_MOSAIC_URL,
@@ -126,6 +128,7 @@ __all__: tuple[str, ...] = (
     'CHELSA_STD',
     'CHELSA_VAR_NAMES',
     'DEFAULT_MONTHS',
+    'ONNX_PRESET_SPECS',
     'TESSERA_YEARS',
     'TESSERA_ZARR_URL',
     'AlphaEarthLocationEncoder',
@@ -158,6 +161,7 @@ __all__: tuple[str, ...] = (
     'MultiLayerFeedForwardNN',
     'MultiResolutionHashEncoding',
     'NeRFLocationEncoder',
+    'ONNXLocationEncoder',
     'OSMGraphCLIPLocationEncoder',
     'OSMGraphCLIP_Weights',
     'RFFCapsule',
@@ -212,6 +216,8 @@ __all__: tuple[str, ...] = (
     'list_models',
     'load_mind',
     'mind',
+    'onnx',
+    'onnx_encoder',
     'osmgraphclip',
     'products',
     'registry',

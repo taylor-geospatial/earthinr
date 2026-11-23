@@ -6,7 +6,7 @@
 import importlib
 import os
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 
@@ -227,17 +227,36 @@ def build_model(preset: ModelPreset, **runtime_kwargs: Any) -> 'LocationEncoder'
     return encoder
 
 
-def get_model(name: str, **kwargs: Any) -> 'LocationEncoder':
+def get_model(
+    name: str, *, backend: Literal['torch', 'onnx'] = 'torch', **kwargs: Any
+) -> 'LocationEncoder':
     """Load a named model preset and instantiate its :class:`LocationEncoder`.
 
     Args:
         name: Registered model preset identifier (see :func:`list_models`).
+        backend: Inference backend, either ``'torch'`` (default) or ``'onnx'``.
         **kwargs: Optional keyword overrides forwarded to the model constructor.
 
     Returns:
         Instantiated :class:`LocationEncoder`.
+
+    Raises:
+        ValueError: If *backend* is invalid or *name* does not have an ONNX
+            export when ``backend='onnx'``.
     """
-    return build_model(get_model_preset(name), **kwargs)
+    if backend == 'torch':
+        return build_model(get_model_preset(name), **kwargs)
+    if backend == 'onnx':
+        from .onnx import ONNX_PRESET_SPECS, onnx_encoder
+
+        if name not in ONNX_PRESET_SPECS:
+            supported = ', '.join(sorted(ONNX_PRESET_SPECS))
+            raise ValueError(
+                f'Preset {name!r} does not have an ONNX export. '
+                f'Supported ONNX presets: {supported}.'
+            )
+        return onnx_encoder(name, **kwargs)
+    raise ValueError(f"Unsupported backend {backend!r}. Expected 'torch' or 'onnx'.")
 
 
 __all__ = (

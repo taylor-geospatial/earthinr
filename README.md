@@ -21,6 +21,9 @@ pip install 'earthinr[products]'
 
 # FAISS-accelerated k-NN probing (falls back to scikit-learn when omitted)
 pip install 'earthinr[knn]'
+
+# ONNX Runtime inference backend for earthinr-zoo models
+pip install "earthinr[onnx]"
 ```
 
 ## Universal Input/Output Contract
@@ -101,6 +104,10 @@ lon = np.array([-122.4194, 8.5417])
 lat = np.array([37.7749, 47.3769])
 year = np.array([2021, 2023])
 features = encoder.encode(lon, lat, year=year)  # shape: (2, 64), dtype: float32
+
+# 3. Optional ONNX Runtime inference backend (pip install "earthinr[onnx]")
+onnx_enc = get_model('sinr', backend='onnx')
+onnx_features = onnx_enc.encode(lon, lat)  # shape: (2, 256), dtype: float32
 ```
 
 ### Downstream Probing & Spatial Baselines

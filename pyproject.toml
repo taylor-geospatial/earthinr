@@ -56,6 +56,10 @@ knn = [
     # faissknn 0.4.2+ required for optional FAISS-accelerated k-NN probing
     "faissknn>=0.4.2",
 ]
+onnx = [
+    # onnxruntime 1.18+ required for ONNX Runtime inference backend
+    "onnxruntime>=1.18",
+]
 style = [
     # ruff 0.14+ required for CPY copyright checks and modern Python 3.12 lint rules
     "ruff>=0.14",
@@ -71,7 +75,7 @@ tests = [
     "pytest-socket>=0.7",
 ]
 all = [
-    "earthinr[products,knn,style,tests]",
+    "earthinr[products,knn,onnx,style,tests]",
 ]
 
 [project.scripts]
