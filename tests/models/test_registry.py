@@ -31,6 +31,10 @@ EXPECTED_PRESETS: tuple[str, ...] = (
     'mind-3072',
     'mind-head',
     'nerf',
+    'osmgraphclip',
+    'osmgraphclip-a-l10',
+    'osmgraphclip-a-l40',
+    'osmgraphclip-ms-l10',
     'rff3072',
     'satclip',
     'satclip-resnet18-l10',
@@ -170,6 +174,10 @@ class TestPackagedPresets:
             'terranova-st',
             'csp-inat',
             'csp-fmow',
+            'osmgraphclip',
+            'osmgraphclip-ms-l10',
+            'osmgraphclip-a-l40',
+            'osmgraphclip-a-l10',
         ],
     )
     def test_neural_presets_build_with_uninitialized_weights(self, name: str) -> None:
