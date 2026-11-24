@@ -35,7 +35,7 @@ class OSMGraphCLIP_Weights(WeightsEnum):  # noqa: N801
             'multiscale': True,
             'sha256': 'bd058d2dce2067c28c34e7315904a0c16b4243b2d63ebe9810f2a79640880f39',
             'onnx_sha256': (
-                'eff1a2b1811b0c95cbcd41bdc312312f8bbc2768559cb842dd36113e8ad5b53a'
+                '103b4017bdf530a28320b613410ee59b4e34de9ee3721d433ee3c5e954d82128'
             ),
             'license': 'Apache-2.0',
         },
@@ -51,7 +51,7 @@ class OSMGraphCLIP_Weights(WeightsEnum):  # noqa: N801
             'multiscale': True,
             'sha256': '70cd9052c97eaeb6d7bd2703291834e03e18f9585329bf866c9a007c75b110b6',
             'onnx_sha256': (
-                '25363e510ef2f9668780df6591cfc37f69f57275013c8df24c06155b96147743'
+                '00434830568490a42b3148f59416ce5c6b2f061a41e08ad4912eb9c5148afbb3'
             ),
             'license': 'Apache-2.0',
         },
@@ -67,7 +67,7 @@ class OSMGraphCLIP_Weights(WeightsEnum):  # noqa: N801
             'multiscale': False,
             'sha256': '8d8675baaef1d9e132871a77af2b08cdcd9cdd1f620f1a71d72178f72c19c57c',
             'onnx_sha256': (
-                '5e67082d0d4edf2b43347458dca7e7be7fc12daad347338e2614905242ba1f29'
+                '3f8c87636a1a6e2453e982591764e7972eda64d301dfb4dcc37eb85046c56f61'
             ),
             'license': 'Apache-2.0',
         },
@@ -83,7 +83,7 @@ class OSMGraphCLIP_Weights(WeightsEnum):  # noqa: N801
             'multiscale': False,
             'sha256': 'c10d24b759eeec5da04c3aef80118acec0f46621545d2dfacd0616ee06a39560',
             'onnx_sha256': (
-                '1abca3d8e5e0472600c7b6a77ebeb23d3059bdf78a5a00baa1549a6e3955e98d'
+                '4efad3c5934f228890582cb95377180d8ccc4beb2124d6fac5465dd3ce6916fa'
             ),
             'license': 'Apache-2.0',
         },

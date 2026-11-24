@@ -602,17 +602,36 @@
       <div class="field">
         <label for="model-select">Model</label>
         <select id="model-select">
-          <option value="csp-inat">csp-inat (0.8 MB)</option>
-          <option value="csp-fmow">csp-fmow (0.8 MB)</option>
-          <option value="sinr" selected>sinr (2.1 MB)</option>
-          <option value="satclip-vit16-l10">satclip-vit16-l10 (2.1 MB)</option>
-          <option value="osmgraphclip-a-l10">osmgraphclip-a-l10 (2.1 MB)</option>
-          <option value="le-sinr">le-sinr (2.4 MB)</option>
-          <option value="geoclosp-rn">geoclosp-rn (2.6 MB)</option>
-          <option value="hydroloc">hydroloc (4.3 MB)</option>
-          <option value="satclip-vit16-l40">satclip-vit16-l40 (6.3 MB)</option>
-          <option value="tte">tte (13.2 MB)</option>
-          <option value="climplicit">climplicit (16.2 MB)</option>
+          <optgroup label="Fast (&lt; 5 MB)">
+            <option value="csp-inat">csp-inat (0.8 MB)</option>
+            <option value="csp-fmow">csp-fmow (0.8 MB)</option>
+            <option value="satclip-vit16-l10">satclip-vit16-l10 (2.0 MB)</option>
+            <option value="satclip-resnet18-l10">satclip-resnet18-l10 (2.0 MB)</option>
+            <option value="satclip-resnet50-l10">satclip-resnet50-l10 (2.0 MB)</option>
+            <option value="osmgraphclip-ms-l10">osmgraphclip-ms-l10 (2.0 MB)</option>
+            <option value="osmgraphclip-a-l10">osmgraphclip-a-l10 (2.0 MB)</option>
+            <option value="sinr" selected>sinr (2.1 MB)</option>
+            <option value="le-sinr">le-sinr (2.3 MB)</option>
+            <option value="geoclosp-rn">geoclosp-rn (2.4 MB)</option>
+            <option value="hydroloc">hydroloc (4.1 MB)</option>
+          </optgroup>
+          <optgroup label="Medium (6–16 MB)">
+            <option value="satclip-vit16-l40">satclip-vit16-l40 (6.0 MB)</option>
+            <option value="satclip-resnet18-l40">satclip-resnet18-l40 (6.0 MB)</option>
+            <option value="satclip-resnet50-l40">satclip-resnet50-l40 (6.0 MB)</option>
+            <option value="osmgraphclip-ms-l40">osmgraphclip-ms-l40 (6.0 MB)</option>
+            <option value="osmgraphclip-a-l40">osmgraphclip-a-l40 (6.0 MB)</option>
+            <option value="tte">tte (13.1 MB)</option>
+            <option value="climplicit">climplicit (16.2 MB)</option>
+          </optgroup>
+          <optgroup label="Large (36–54 MB)">
+            <option value="gtloc">gtloc (36.2 MB)</option>
+            <option value="geoclip">geoclip (36.2 MB)</option>
+            <option value="taxabind">taxabind (36.2 MB)</option>
+            <option value="gair">gair (39.2 MB)</option>
+            <option value="sled-s1-s2-ls">sled-s1-s2-ls (54.2 MB)</option>
+            <option value="sled-s2-ls">sled-s2-ls (54.2 MB)</option>
+          </optgroup>
         </select>
       </div>
 
@@ -795,8 +814,12 @@
       const hoverMetricVal = document.getElementById('hover-metric-val');
       const hoverEmb = document.getElementById('hover-emb');
 
+      const MAX_BUFFER_CACHE_BYTES = 64 * 1024 * 1024;
       const bufferCache = new Map();
-      const sessionCache = new Map();
+      let bufferCacheBytes = 0;
+      let activeSessionKey = '';
+      let activeSessionEntry = null;
+      let inFlightInference = Promise.resolve();
 
       const state = {
         runId: 0,
@@ -886,7 +909,10 @@
 
       async function fetchModelBuffer(modelId) {
         if (bufferCache.has(modelId)) {
-          return { buffer: bufferCache.get(modelId), downloadMs: 0 };
+          const cached = bufferCache.get(modelId);
+          bufferCache.delete(modelId);
+          bufferCache.set(modelId, cached);
+          return { buffer: cached, downloadMs: 0 };
         }
         const url = HF_BASE + '/' + encodeURIComponent(modelId) + '/model.onnx';
         const t0 = performance.now();
@@ -896,15 +922,50 @@
         }
         const buffer = await resp.arrayBuffer();
         const downloadMs = performance.now() - t0;
-        bufferCache.set(modelId, buffer);
+        if (buffer.byteLength <= MAX_BUFFER_CACHE_BYTES) {
+          while (bufferCache.size > 0 && bufferCacheBytes + buffer.byteLength > MAX_BUFFER_CACHE_BYTES) {
+            const oldestKey = bufferCache.keys().next().value;
+            const oldestBuf = bufferCache.get(oldestKey);
+            bufferCache.delete(oldestKey);
+            bufferCacheBytes -= oldestBuf.byteLength;
+          }
+          bufferCache.set(modelId, buffer);
+          bufferCacheBytes += buffer.byteLength;
+        }
         return { buffer, downloadMs };
+      }
+
+      async function releaseActiveSession() {
+        if (activeSessionEntry && activeSessionEntry.session) {
+          const sess = activeSessionEntry.session;
+          activeSessionEntry = null;
+          activeSessionKey = '';
+          try {
+            await inFlightInference;
+          } catch (_prevErr) {
+            // Wait for any in-flight session.run() to finish before releasing native memory.
+          }
+          if (typeof sess.release === 'function') {
+            try {
+              await sess.release();
+            } catch (_releaseErr) {
+              // Ignore release errors when switching models.
+            }
+          }
+        }
       }
 
       async function getSession(modelId, forceWasm) {
         const cacheKey = modelId + ':' + (forceWasm ? 'wasm' : 'auto');
-        if (sessionCache.has(cacheKey)) {
-          return sessionCache.get(cacheKey);
+        if (activeSessionEntry && activeSessionKey === cacheKey) {
+          return {
+            session: activeSessionEntry.session,
+            provider: activeSessionEntry.provider,
+            downloadMs: 0,
+          };
         }
+
+        await releaseActiveSession();
 
         const { buffer, downloadMs } = await fetchModelBuffer(modelId);
         const bytes = new Uint8Array(buffer);
@@ -931,7 +992,8 @@
         }
 
         const entry = { session, provider, downloadMs };
-        sessionCache.set(cacheKey, entry);
+        activeSessionKey = cacheKey;
+        activeSessionEntry = entry;
         return entry;
       }
 
@@ -952,7 +1014,9 @@
           const slice = coords.subarray(start * 2, end * 2);
 
           const inputTensor = new ort.Tensor('float32', slice, [batchLen, 2]);
-          const results = await session.run({ [inputName]: inputTensor });
+          const runPromise = session.run({ [inputName]: inputTensor });
+          inFlightInference = runPromise.catch(() => {});
+          const results = await runPromise;
           const outTensor = results[outputName];
           const outData = outTensor.data;
 
