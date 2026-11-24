@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live WebGPU Demo — EarthINR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.4/dist.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <style>
+    :root {
+      --tg-brown: #3b1e1c;
+      --tg-ivory: #f4f4eb;
+      --tg-periwinkle: #80a0d8;
+      --tg-red: #ff4f2c;
+      --tg-light-blue: #a7d0dc;
+      --tg-green: #cff29e;
+      --tg-cream: #fdfdf5;
+      --tg-warm-gray: #f6f2ee;
+      --tg-mist: #ecf1f2;
+      --tg-charcoal: #303030;
+      --tg-hairline: rgba(59, 30, 28, 0.16);
+      --tg-muted: rgba(59, 30, 28, 0.62);
+      --tg-sans: "degular-text", "Degular", "Space Grotesk", "Open Sans", sans-serif;
+      --tg-mono: "gintronic", "Gintronic", "JetBrains Mono", "Inconsolata", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --tg-radius: 10px;
+      --tg-radius-pill: 36px;
+      --tg-ease: 0.25s ease;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--tg-cream);
+      color: var(--tg-brown);
+      font-family: var(--tg-sans);
+      font-size: 14px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+      transition: color var(--tg-ease);
+    }
+    a:hover { color: var(--tg-red); }
+
+    /* Top header + nav */
+    .tg-topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px 24px;
+      padding: 14px 24px;
+      background: var(--tg-cream);
+      border-bottom: 1px solid var(--tg-hairline);
+    }
+
+    .tg-brand-block {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px 14px;
+    }
+
+    .tg-eyebrow {
+      font-family: var(--tg-mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-red);
+    }
+
+    .tg-title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--tg-brown);
+    }
+
+    .tg-subtitle {
+      margin: 0;
+      font-size: 13px;
+      color: var(--tg-muted);
+    }
+
+    .tg-nav {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+    }
+
+    .tg-nav a {
+      font-family: var(--tg-mono);
+      font-size: 12.5px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding-bottom: 3px;
+      border-bottom: 2px solid transparent;
+    }
+
+    .tg-nav a.active {
+      color: var(--tg-red);
+      border-bottom-color: var(--tg-red);
+    }
+
+    /* Controls bar */
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px 18px;
+      padding: 10px 24px;
+      background: var(--tg-ivory);
+      border-bottom: 1px solid var(--tg-hairline);
+    }
+
+    .controls-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 14px;
+    }
+
+    .field {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .field label {
+      font-family: var(--tg-mono);
+      font-size: 11.5px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--tg-muted);
+    }
+
+    .field select {
+      font-family: var(--tg-mono);
+      font-size: 12.5px;
+      color: var(--tg-brown);
+      background: var(--tg-cream);
+      border: 1px solid var(--tg-light-blue);
+      border-radius: 6px;
+      padding: 5px 10px;
+      outline: none;
+      cursor: pointer;
+    }
+    .field select:focus {
+      border-color: var(--tg-periwinkle);
+    }
+
+    .checkbox-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--tg-mono);
+      font-size: 11.5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--tg-brown);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .tg-btn {
+      font-family: var(--tg-mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--tg-brown);
+      background: transparent;
+      border: 2px solid var(--tg-periwinkle);
+      border-radius: var(--tg-radius-pill);
+      padding: 5px 14px;
+      cursor: pointer;
+      transition: background var(--tg-ease), border-color var(--tg-ease);
+    }
+    .tg-btn:hover:not(:disabled) {
+      background: var(--tg-light-blue);
+      border-color: var(--tg-light-blue);
+    }
+    .tg-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Telemetry / status strip */
+    .telemetry {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--tg-mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: var(--tg-radius-pill);
+      border: 1px solid var(--tg-hairline);
+      background: var(--tg-cream);
+      color: var(--tg-brown);
+      font-size: 11.5px;
+      font-weight: 500;
+    }
+
+    .badge-webgpu {
+      background: var(--tg-green);
+      border-color: var(--tg-brown);
+      color: var(--tg-brown);
+      font-weight: 600;
+    }
+
+    .badge-wasm {
+      background: var(--tg-mist);
+      border-color: var(--tg-periwinkle);
+      color: var(--tg-brown);
+      font-weight: 600;
+    }
+
+    .badge-error {
+      background: var(--tg-red);
+      border-color: var(--tg-red);
+      color: var(--tg-cream);
+      font-weight: 600;
+    }
+
+    .status-line {
+      color: var(--tg-muted);
+      font-size: 12px;
+    }
+
+    /* Map container */
+    .map-stage {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 460px;
+      background: var(--tg-brown);
+      overflow: hidden;
+    }
+
+    #deck-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .hover-readout {
+      position: absolute;
+      left: 16px;
+      bottom: 16px;
+      z-index: 10;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--tg-light-blue);
+      background: rgba(59, 30, 28, 0.92);
+      color: var(--tg-ivory);
+      font-family: var(--tg-mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      pointer-events: none;
+      max-width: calc(100% - 32px);
+    }
+
+    .hover-readout .label {
+      color: var(--tg-light-blue);
+      margin-right: 6px;
+    }
+
+    .hover-readout .sep {
+      color: rgba(244, 244, 235, 0.35);
+      margin: 0 8px;
+    }
+
+    .error-overlay {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      max-width: 560px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--tg-red);
+      background: var(--tg-cream);
+      color: var(--tg-brown);
+      font-size: 13px;
+      display: none;
+    }
+    .error-overlay.show { display: block; }
+    .error-overlay strong { color: var(--tg-red); }
+
+    @media (max-width: 720px) {
+      .tg-topbar, .controls-bar { padding: 12px 14px; }
+      .tg-subtitle { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="tg-topbar">
+    <div class="tg-brand-block">
+      <span class="tg-eyebrow">Taylor Geospatial &middot; EarthINR</span>
+      <h1 class="tg-title">Live Embedding Map</h1>
+      <p class="tg-subtitle">In-browser ONNX inference projected onto its first three principal components (RGB).</p>
+    </div>
+    <nav class="tg-nav" aria-label="Primary">
+      <a href="index.html">Leaderboard</a>
+      <a href="demo.html" class="active" aria-current="page">Live WebGPU Demo</a>
+    </nav>
+  </header>
+
+  <section class="controls-bar" aria-label="Model and grid controls">
+    <div class="controls-group">
+      <div class="field">
+        <label for="model-select">Model</label>
+        <select id="model-select">
+          <option value="csp-inat">csp-inat (0.8 MB)</option>
+          <option value="csp-fmow">csp-fmow (0.8 MB)</option>
+          <option value="sinr" selected>sinr (2.1 MB)</option>
+          <option value="satclip-vit16-l10">satclip-vit16-l10 (2.1 MB)</option>
+          <option value="osmgraphclip-a-l10">osmgraphclip-a-l10 (2.1 MB)</option>
+          <option value="le-sinr">le-sinr (2.4 MB)</option>
+          <option value="geoclosp-rn">geoclosp-rn (2.6 MB)</option>
+          <option value="hydroloc">hydroloc (4.3 MB)</option>
+          <option value="satclip-vit16-l40">satclip-vit16-l40 (6.3 MB)</option>
+          <option value="tte">tte (13.2 MB)</option>
+          <option value="climplicit">climplicit (16.2 MB)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="grid-select">Grid</label>
+        <select id="grid-select">
+          <option value="250">250 km</option>
+          <option value="100" selected>100 km</option>
+          <option value="50">50 km</option>
+          <option value="25">25 km</option>
+        </select>
+      </div>
+
+      <label class="checkbox-field">
+        <input id="coastlines-toggle" type="checkbox" checked />
+        Coastlines
+      </label>
+
+      <button id="run-btn" class="tg-btn" type="button">Run</button>
+    </div>
+
+    <div class="telemetry">
+      <span id="backend-badge" class="badge">Backend: --</span>
+      <span id="grid-badge" class="badge">Grid: --</span>
+      <span id="timing-badge" class="badge">Timing: --</span>
+      <span id="status-line" class="status-line">Initializing&hellip;</span>
+    </div>
+  </section>
+
+  <main class="map-stage">
+    <div id="deck-container"></div>
+    <div id="error-overlay" class="error-overlay" role="alert"></div>
+    <div id="hover-readout" class="hover-readout">
+      <span class="label">COORD</span><span id="hover-coord">Move pointer over map</span>
+      <span class="sep">|</span>
+      <span class="label">e[0..2]</span><span id="hover-emb">--</span>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const HF_BASE = 'https://huggingface.co/taylor-geospatial/earthinr-zoo/resolve/main';
+      const ORT_WASM_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+      const WORLD_ATLAS_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json';
+
+      const LON_MIN = -180;
+      const LON_MAX = 180;
+      const LAT_MIN = -85;
+      const LAT_MAX = 85;
+      const KM_PER_DEG = 111.32;
+      const BATCH_SIZE = 4096;
+
+      if (typeof ort !== 'undefined' && ort.env && ort.env.wasm) {
+        ort.env.wasm.wasmPaths = ORT_WASM_CDN;
+      }
+
+      const modelSelect = document.getElementById('model-select');
+      const gridSelect = document.getElementById('grid-select');
+      const coastlinesToggle = document.getElementById('coastlines-toggle');
+      const runBtn = document.getElementById('run-btn');
+      const backendBadge = document.getElementById('backend-badge');
+      const gridBadge = document.getElementById('grid-badge');
+      const timingBadge = document.getElementById('timing-badge');
+      const statusLine = document.getElementById('status-line');
+      const errorOverlay = document.getElementById('error-overlay');
+      const hoverCoord = document.getElementById('hover-coord');
+      const hoverEmb = document.getElementById('hover-emb');
+
+      const bufferCache = new Map();
+      const sessionCache = new Map();
+
+      const state = {
+        runId: 0,
+        landGeoJson: null,
+        bitmapCanvas: null,
+        bitmapVersion: 0,
+        embeddings: null,
+        embedDim: 0,
+        gridW: 0,
+        gridH: 0,
+        deckInstance: null,
+      };
+
+      function setStatus(text) {
+        statusLine.textContent = text;
+      }
+
+      function showError(message) {
+        if (!message) {
+          errorOverlay.classList.remove('show');
+          errorOverlay.innerHTML = '';
+          return;
+        }
+        errorOverlay.innerHTML = '<strong>Error:</strong> ' + escapeHtml(message);
+        errorOverlay.classList.add('show');
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function setBackendBadge(provider) {
+        backendBadge.className = 'badge';
+        if (provider === 'webgpu') {
+          backendBadge.textContent = 'WebGPU';
+          backendBadge.classList.add('badge-webgpu');
+        } else if (provider === 'wasm') {
+          backendBadge.textContent = 'WASM';
+          backendBadge.classList.add('badge-wasm');
+        } else if (provider === 'error') {
+          backendBadge.textContent = 'Failed';
+          backendBadge.classList.add('badge-error');
+        } else {
+          backendBadge.textContent = 'Backend: --';
+        }
+      }
+
+      function yieldToBrowser() {
+        return new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      function buildCoordGrid(km) {
+        const stepDeg = km / KM_PER_DEG;
+        const width = Math.max(2, Math.round((LON_MAX - LON_MIN) / stepDeg));
+        const height = Math.max(2, Math.round((LAT_MAX - LAT_MIN) / stepDeg));
+        const count = width * height;
+        const coords = new Float32Array(count * 2);
+
+        let ptr = 0;
+        for (let y = 0; y < height; y++) {
+          const lat = LAT_MAX - ((y + 0.5) / height) * (LAT_MAX - LAT_MIN);
+          for (let x = 0; x < width; x++) {
+            const lon = LON_MIN + ((x + 0.5) / width) * (LON_MAX - LON_MIN);
+            coords[ptr++] = lon;
+            coords[ptr++] = lat;
+          }
+        }
+        return { width, height, count, coords };
+      }
+
+      async function fetchModelBuffer(modelId) {
+        if (bufferCache.has(modelId)) {
+          return { buffer: bufferCache.get(modelId), downloadMs: 0 };
+        }
+        const url = HF_BASE + '/' + encodeURIComponent(modelId) + '/model.onnx';
+        const t0 = performance.now();
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          throw new Error('HTTP ' + resp.status + ' fetching ' + modelId + '/model.onnx');
+        }
+        const buffer = await resp.arrayBuffer();
+        const downloadMs = performance.now() - t0;
+        bufferCache.set(modelId, buffer);
+        return { buffer, downloadMs };
+      }
+
+      async function getSession(modelId, forceWasm) {
+        const cacheKey = modelId + ':' + (forceWasm ? 'wasm' : 'auto');
+        if (sessionCache.has(cacheKey)) {
+          return sessionCache.get(cacheKey);
+        }
+
+        const { buffer, downloadMs } = await fetchModelBuffer(modelId);
+        const bytes = new Uint8Array(buffer);
+
+        let session = null;
+        let provider = 'wasm';
+
+        if (!forceWasm && typeof navigator !== 'undefined' && 'gpu' in navigator) {
+          try {
+            session = await ort.InferenceSession.create(bytes, {
+              executionProviders: ['webgpu'],
+            });
+            provider = 'webgpu';
+          } catch (_webgpuErr) {
+            session = null;
+          }
+        }
+
+        if (!session) {
+          session = await ort.InferenceSession.create(bytes, {
+            executionProviders: ['wasm'],
+          });
+          provider = 'wasm';
+        }
+
+        const entry = { session, provider, downloadMs };
+        sessionCache.set(cacheKey, entry);
+        return entry;
+      }
+
+      async function runChunkedInference(session, coords, count, runId) {
+        const inputName = session.inputNames[0];
+        const outputName = session.outputNames[0];
+        const totalChunks = Math.ceil(count / BATCH_SIZE);
+
+        let embeddings = null;
+        let embedDim = 0;
+
+        for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+          if (runId !== state.runId) return null;
+
+          const start = chunkIdx * BATCH_SIZE;
+          const end = Math.min(start + BATCH_SIZE, count);
+          const batchLen = end - start;
+          const slice = coords.subarray(start * 2, end * 2);
+
+          const inputTensor = new ort.Tensor('float32', slice, [batchLen, 2]);
+          const results = await session.run({ [inputName]: inputTensor });
+          const outTensor = results[outputName];
+          const outData = outTensor.data;
+
+          if (!embeddings) {
+            embedDim = outTensor.dims[outTensor.dims.length - 1];
+            embeddings = new Float32Array(count * embedDim);
+          }
+
+          embeddings.set(outData, start * embedDim);
+          if (typeof outTensor.dispose === 'function') outTensor.dispose();
+          if (typeof inputTensor.dispose === 'function') inputTensor.dispose();
+
+          if (chunkIdx % 2 === 0 || chunkIdx === totalChunks - 1) {
+            setStatus('Inference ' + (chunkIdx + 1) + ' / ' + totalChunks + ' chunks');
+            await yieldToBrowser();
+          }
+        }
+
+        return { embeddings, embedDim };
+      }
+
+      function computePcaRgbCanvas(embeddings, width, height, dim) {
+        const count = width * height;
+        const maxFitSamples = 8192;
+        const stride = Math.max(1, Math.floor(count / maxFitSamples));
+        const sampleCount = Math.ceil(count / stride);
+
+        // Compute feature means on strided sample
+        const mean = new Float64Array(dim);
+        for (let i = 0; i < count; i += stride) {
+          const base = i * dim;
+          for (let d = 0; d < dim; d++) {
+            const val = embeddings[base + d];
+            if (Number.isFinite(val)) mean[d] += val;
+          }
+        }
+        for (let d = 0; d < dim; d++) mean[d] /= sampleCount;
+
+        // Materialize centered sample matrix for fast power iteration
+        const centered = new Float32Array(sampleCount * dim);
+        let sIdx = 0;
+        for (let i = 0; i < count; i += stride) {
+          const src = i * dim;
+          const dst = sIdx * dim;
+          for (let d = 0; d < dim; d++) {
+            const val = embeddings[src + d];
+            centered[dst + d] = Number.isFinite(val) ? val - mean[d] : 0;
+          }
+          sIdx++;
+        }
+
+        // Power iteration for top 3 principal components
+        const basis = [];
+        const tmpProj = new Float64Array(sampleCount);
+        const nextVec = new Float64Array(dim);
+        const nComp = Math.min(3, dim);
+
+        for (let c = 0; c < nComp; c++) {
+          const v = new Float64Array(dim);
+          for (let d = 0; d < dim; d++) {
+            v[d] = Math.sin((d + 1) * (c + 1) * 1.6180339) + 0.5;
+          }
+          orthogonalizeAndNormalize(v, basis);
+
+          for (let iter = 0; iter < 14; iter++) {
+            for (let s = 0; s < sampleCount; s++) {
+              const row = s * dim;
+              let dot = 0;
+              for (let d = 0; d < dim; d++) dot += centered[row + d] * v[d];
+              tmpProj[s] = dot;
+            }
+            nextVec.fill(0);
+            for (let s = 0; s < sampleCount; s++) {
+              const p = tmpProj[s];
+              const row = s * dim;
+              for (let d = 0; d < dim; d++) nextVec[d] += centered[row + d] * p;
+            }
+            for (let d = 0; d < dim; d++) v[d] = nextVec[d];
+            orthogonalizeAndNormalize(v, basis);
+          }
+
+          basis.push(Float32Array.from(v));
+        }
+
+        while (basis.length < 3) {
+          basis.push(new Float32Array(dim));
+        }
+
+        // Project all N points onto top 3 components
+        const scores = [
+          new Float32Array(count),
+          new Float32Array(count),
+          new Float32Array(count),
+        ];
+        const b0 = basis[0];
+        const b1 = basis[1];
+        const b2 = basis[2];
+
+        for (let i = 0; i < count; i++) {
+          const base = i * dim;
+          let p0 = 0;
+          let p1 = 0;
+          let p2 = 0;
+          for (let d = 0; d < dim; d++) {
+            const raw = embeddings[base + d];
+            const x = Number.isFinite(raw) ? raw - mean[d] : 0;
+            p0 += x * b0[d];
+            p1 += x * b1[d];
+            p2 += x * b2[d];
+          }
+          scores[0][i] = p0;
+          scores[1][i] = p1;
+          scores[2][i] = p2;
+        }
+
+        // 2-98 percentile stretch per channel
+        const bounds = scores.map((arr) => percentileBounds(arr, 0.02, 0.98));
+
+        const rgba = new Uint8ClampedArray(count * 4);
+        const [lo0, hi0] = bounds[0];
+        const [lo1, hi1] = bounds[1];
+        const [lo2, hi2] = bounds[2];
+        const s0 = hi0 > lo0 ? 255 / (hi0 - lo0) : 0;
+        const s1 = hi1 > lo1 ? 255 / (hi1 - lo1) : 0;
+        const s2 = hi2 > lo2 ? 255 / (hi2 - lo2) : 0;
+
+        for (let i = 0; i < count; i++) {
+          const px = i * 4;
+          rgba[px] = clampByte((scores[0][i] - lo0) * s0);
+          rgba[px + 1] = clampByte((scores[1][i] - lo1) * s1);
+          rgba[px + 2] = clampByte((scores[2][i] - lo2) * s2);
+          rgba[px + 3] = 255;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
+        return canvas;
+      }
+
+      function orthogonalizeAndNormalize(v, basis) {
+        for (let b = 0; b < basis.length; b++) {
+          const u = basis[b];
+          let dot = 0;
+          for (let d = 0; d < v.length; d++) dot += v[d] * u[d];
+          for (let d = 0; d < v.length; d++) v[d] -= dot * u[d];
+        }
+        let normSq = 0;
+        for (let d = 0; d < v.length; d++) normSq += v[d] * v[d];
+        const norm = Math.sqrt(normSq);
+        if (norm > 1e-12) {
+          for (let d = 0; d < v.length; d++) v[d] /= norm;
+        }
+      }
+
+      function percentileBounds(arr, pLow, pHigh) {
+        const step = Math.max(1, Math.floor(arr.length / 16384));
+        const sample = [];
+        for (let i = 0; i < arr.length; i += step) {
+          const v = arr[i];
+          if (Number.isFinite(v)) sample.push(v);
+        }
+        if (sample.length === 0) return [0, 1];
+        sample.sort((a, b) => a - b);
+        const lo = sample[Math.floor((sample.length - 1) * pLow)];
+        const hi = sample[Math.floor((sample.length - 1) * pHigh)];
+        return hi > lo ? [lo, hi] : [sample[0], sample[sample.length - 1] + 1e-6];
+      }
+
+      function clampByte(v) {
+        if (v <= 0) return 0;
+        if (v >= 255) return 255;
+        return Math.round(v);
+      }
+
+      function buildDeckLayers() {
+        const layers = [];
+        if (state.bitmapCanvas) {
+          layers.push(
+            new deck.BitmapLayer({
+              id: 'pca-embeddings-' + state.bitmapVersion,
+              image: state.bitmapCanvas,
+              bounds: [LON_MIN, LAT_MIN, LON_MAX, LAT_MAX],
+              pickable: true,
+            })
+          );
+        }
+
+        if (coastlinesToggle.checked && state.landGeoJson) {
+          layers.push(
+            new deck.GeoJsonLayer({
+              id: 'world-coastlines',
+              data: state.landGeoJson,
+              filled: false,
+              stroked: true,
+              getLineColor: [244, 244, 235, 195],
+              lineWidthMinPixels: 1.1,
+              pickable: false,
+            })
+          );
+        }
+
+        return layers;
+      }
+
+      function renderDeck() {
+        if (!state.deckInstance) return;
+        state.deckInstance.setProps({ layers: buildDeckLayers() });
+      }
+
+      function handleHover(info) {
+        if (!info || !info.coordinate) {
+          hoverCoord.textContent = 'Move pointer over map';
+          hoverEmb.textContent = '--';
+          return;
+        }
+        let lon = info.coordinate[0];
+        const lat = info.coordinate[1];
+        // Wrap longitude into [-180, 180]
+        lon = ((((lon + 180) % 360) + 360) % 360) - 180;
+
+        hoverCoord.textContent = lon.toFixed(3) + '°, ' + lat.toFixed(3) + '°';
+
+        if (!state.embeddings || lat < LAT_MIN || lat > LAT_MAX) {
+          hoverEmb.textContent = '--';
+          return;
+        }
+
+        const x = Math.min(
+          state.gridW - 1,
+          Math.max(0, Math.floor(((lon - LON_MIN) / (LON_MAX - LON_MIN)) * state.gridW))
+        );
+        const y = Math.min(
+          state.gridH - 1,
+          Math.max(0, Math.floor(((LAT_MAX - lat) / (LAT_MAX - LAT_MIN)) * state.gridH))
+        );
+        const idx = (y * state.gridW + x) * state.embedDim;
+        const preview = [];
+        const k = Math.min(3, state.embedDim);
+        for (let d = 0; d < k; d++) {
+          preview.push(state.embeddings[idx + d].toFixed(3));
+        }
+        hoverEmb.textContent = '[' + preview.join(', ') + '] (D=' + state.embedDim + ')';
+      }
+
+      function initDeck() {
+        state.deckInstance = new deck.Deck({
+          container: 'deck-container',
+          views: new deck.MapView({ repeat: true }),
+          initialViewState: {
+            longitude: 0,
+            latitude: 15,
+            zoom: 1.35,
+            minZoom: 0.5,
+            maxZoom: 10,
+            pitch: 0,
+            bearing: 0,
+          },
+          controller: true,
+          layers: [],
+          onHover: handleHover,
+        });
+      }
+
+      async function loadCoastlines() {
+        try {
+          const resp = await fetch(WORLD_ATLAS_URL);
+          if (!resp.ok) return;
+          const topo = await resp.json();
+          if (typeof topojson !== 'undefined' && topo.objects && topo.objects.land) {
+            state.landGeoJson = topojson.feature(topo, topo.objects.land);
+            renderDeck();
+          }
+        } catch (_err) {
+          // Coastline overlay is optional; map still renders without it.
+        }
+      }
+
+      async function runPipeline() {
+        const runId = ++state.runId;
+        const modelId = modelSelect.value;
+        const gridKm = Number(gridSelect.value);
+
+        showError('');
+        runBtn.disabled = true;
+
+        try {
+          const { width, height, count, coords } = buildCoordGrid(gridKm);
+          gridBadge.textContent = 'Grid: ' + width + ' × ' + height + ' (' + count.toLocaleString() + ')';
+          setStatus('Loading ' + modelId + '.onnx…');
+
+          let sessionEntry = await getSession(modelId, false);
+          if (runId !== state.runId) return;
+
+          setBackendBadge(sessionEntry.provider);
+
+          let tInf0 = performance.now();
+          let infResult = null;
+          try {
+            infResult = await runChunkedInference(sessionEntry.session, coords, count, runId);
+          } catch (runErr) {
+            if (sessionEntry.provider === 'webgpu') {
+              setStatus('WebGPU op unsupported, falling back to WASM…');
+              sessionEntry = await getSession(modelId, true);
+              if (runId !== state.runId) return;
+              setBackendBadge(sessionEntry.provider);
+              tInf0 = performance.now();
+              infResult = await runChunkedInference(sessionEntry.session, coords, count, runId);
+            } else {
+              throw runErr;
+            }
+          }
+
+          if (!infResult || runId !== state.runId) return;
+          const inferMs = performance.now() - tInf0;
+
+          setStatus('Computing 3-component PCA…');
+          await yieldToBrowser();
+          if (runId !== state.runId) return;
+
+          const tPca0 = performance.now();
+          const canvas = computePcaRgbCanvas(infResult.embeddings, width, height, infResult.embedDim);
+          const pcaMs = performance.now() - tPca0;
+
+          state.embeddings = infResult.embeddings;
+          state.embedDim = infResult.embedDim;
+          state.gridW = width;
+          state.gridH = height;
+          state.bitmapCanvas = canvas;
+          state.bitmapVersion++;
+          renderDeck();
+
+          const dlPart = sessionEntry.downloadMs > 0
+            ? 'dl ' + Math.round(sessionEntry.downloadMs) + ' ms'
+            : 'cached';
+          timingBadge.textContent =
+            dlPart + ' · infer ' + Math.round(inferMs) + ' ms · pca ' + Math.round(pcaMs) + ' ms';
+          setStatus('Ready (' + modelId + ', D=' + infResult.embedDim + ')');
+        } catch (err) {
+          if (runId !== state.runId) return;
+          setBackendBadge('error');
+          setStatus('Run failed');
+          showError(err && err.message ? err.message : String(err));
+        } finally {
+          if (runId === state.runId) {
+            runBtn.disabled = false;
+          }
+        }
+      }
+
+      modelSelect.addEventListener('change', runPipeline);
+      gridSelect.addEventListener('change', runPipeline);
+      coastlinesToggle.addEventListener('change', renderDeck);
+      runBtn.addEventListener('click', runPipeline);
+
+      initDeck();
+      loadCoastlines();
+      runPipeline();
+    })();
+  </script>
+</body>
+</html>

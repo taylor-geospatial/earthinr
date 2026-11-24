@@ -1,0 +1,1977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CoordBench Leaderboard — EarthINR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --tg-brown: #3b1e1c;
+      --tg-ivory: #f4f4eb;
+      --tg-periwinkle: #80a0d8;
+      --tg-red: #ff4f2c;
+      --tg-light-blue: #a7d0dc;
+      --tg-green: #cff29e;
+      --tg-cream: #fdfdf5;
+      --tg-warm-gray: #f6f2ee;
+      --tg-mist: #ecf1f2;
+      --tg-charcoal: #303030;
+      --tg-hairline: rgba(59, 30, 28, 0.16);
+
+      --bg: var(--tg-cream);
+      --surface: #ffffff;
+      --surface-alt: var(--tg-ivory);
+      --surface-hover: var(--tg-mist);
+      --border: var(--tg-light-blue);
+      --border-strong: var(--tg-periwinkle);
+      --text: var(--tg-brown);
+      --text-muted: rgba(59, 30, 28, 0.68);
+      --text-faint: rgba(59, 30, 28, 0.46);
+      --accent: var(--tg-periwinkle);
+      --accent-soft: rgba(128, 160, 216, 0.18);
+      --accent-text: var(--tg-brown);
+      --best-bg: rgba(207, 242, 158, 0.48);
+      --best-text: var(--tg-brown);
+      --second-bg: rgba(167, 208, 220, 0.24);
+      --badge-linear-bg: var(--tg-mist);
+      --badge-linear-fg: var(--tg-brown);
+      --badge-chunked-bg: rgba(128, 160, 216, 0.22);
+      --badge-chunked-fg: var(--tg-brown);
+      --badge-spatial-bg: rgba(255, 79, 44, 0.14);
+      --badge-spatial-fg: #a12c14;
+      --badge-other-bg: var(--tg-ivory);
+      --badge-other-fg: var(--tg-charcoal);
+      --bar-fill: rgba(128, 160, 216, 0.2);
+      --warn-bg: var(--tg-ivory);
+      --warn-border: var(--tg-red);
+      --warn-fg: var(--tg-brown);
+      --err-bg: rgba(255, 79, 44, 0.12);
+      --err-border: var(--tg-red);
+      --err-fg: #9c250e;
+      --shadow: none;
+      --radius: 10px;
+      --font-sans: "degular-text", "Degular", "Space Grotesk", "Open Sans", sans-serif;
+      --font-mono: "gintronic", "Gintronic", "JetBrains Mono", "Inconsolata", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #241211;
+        --surface: var(--tg-brown);
+        --surface-alt: #4a2724;
+        --surface-hover: #532c29;
+        --border: rgba(167, 208, 220, 0.32);
+        --border-strong: var(--tg-light-blue);
+        --text: var(--tg-ivory);
+        --text-muted: rgba(246, 242, 238, 0.74);
+        --text-faint: rgba(246, 242, 238, 0.5);
+        --accent: var(--tg-light-blue);
+        --accent-soft: rgba(167, 208, 220, 0.18);
+        --accent-text: var(--tg-ivory);
+        --best-bg: rgba(207, 242, 158, 0.22);
+        --best-text: var(--tg-green);
+        --second-bg: rgba(167, 208, 220, 0.12);
+        --badge-linear-bg: rgba(167, 208, 220, 0.2);
+        --badge-linear-fg: var(--tg-light-blue);
+        --badge-chunked-bg: rgba(128, 160, 216, 0.24);
+        --badge-chunked-fg: #c9d9f3;
+        --badge-spatial-bg: rgba(255, 79, 44, 0.22);
+        --badge-spatial-fg: #ff9a85;
+        --badge-other-bg: #4a2724;
+        --badge-other-fg: var(--tg-warm-gray);
+        --bar-fill: rgba(167, 208, 220, 0.2);
+        --warn-bg: rgba(255, 79, 44, 0.14);
+        --warn-border: rgba(255, 79, 44, 0.45);
+        --warn-fg: var(--tg-ivory);
+        --err-bg: rgba(255, 79, 44, 0.2);
+        --err-border: var(--tg-red);
+        --err-fg: #ffd2c7;
+        --shadow: none;
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #241211;
+      --surface: var(--tg-brown);
+      --surface-alt: #4a2724;
+      --surface-hover: #532c29;
+      --border: rgba(167, 208, 220, 0.32);
+      --border-strong: var(--tg-light-blue);
+      --text: var(--tg-ivory);
+      --text-muted: rgba(246, 242, 238, 0.74);
+      --text-faint: rgba(246, 242, 238, 0.5);
+      --accent: var(--tg-light-blue);
+      --accent-soft: rgba(167, 208, 220, 0.18);
+      --accent-text: var(--tg-ivory);
+      --best-bg: rgba(207, 242, 158, 0.22);
+      --best-text: var(--tg-green);
+      --second-bg: rgba(167, 208, 220, 0.12);
+      --badge-linear-bg: rgba(167, 208, 220, 0.2);
+      --badge-linear-fg: var(--tg-light-blue);
+      --badge-chunked-bg: rgba(128, 160, 216, 0.24);
+      --badge-chunked-fg: #c9d9f3;
+      --badge-spatial-bg: rgba(255, 79, 44, 0.22);
+      --badge-spatial-fg: #ff9a85;
+      --badge-other-bg: #4a2724;
+      --badge-other-fg: var(--tg-warm-gray);
+      --bar-fill: rgba(167, 208, 220, 0.2);
+      --warn-bg: rgba(255, 79, 44, 0.14);
+      --warn-border: rgba(255, 79, 44, 0.45);
+      --warn-fg: var(--tg-ivory);
+      --err-bg: rgba(255, 79, 44, 0.2);
+      --err-border: var(--tg-red);
+      --err-fg: #ffd2c7;
+      --shadow: none;
+    }
+
+    /* Top navigation bar matching docs/demo.html */
+    .tg-topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px 24px;
+      padding: 14px 24px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tg-topbar-brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .tg-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-red);
+    }
+
+    .tg-nav {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+    }
+
+    .tg-nav a {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text);
+      padding-bottom: 3px;
+      border-bottom: 2px solid transparent;
+      text-decoration: none;
+    }
+
+    .tg-nav a:hover {
+      color: var(--tg-red);
+      text-decoration: none;
+    }
+
+    .tg-nav a.active {
+      color: var(--tg-red);
+      border-bottom-color: var(--tg-red);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+
+    .container {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 28px 20px 56px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand h1 {
+      margin: 0 0 4px;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-tag {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 13.5px;
+      max-width: 680px;
+    }
+
+    .header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 36px;
+      border: 2px solid var(--border-strong);
+      background: transparent;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+    .btn:hover {
+      background: var(--tg-light-blue);
+      border-color: var(--tg-light-blue);
+      color: var(--tg-brown);
+    }
+    .btn-primary {
+      background: var(--tg-brown);
+      border-color: var(--tg-brown);
+      color: var(--tg-ivory);
+    }
+    .btn-primary:hover {
+      background: var(--tg-red);
+      border-color: var(--tg-red);
+      color: var(--tg-cream);
+    }
+    :root[data-theme="dark"] .btn-primary {
+      background: var(--tg-light-blue);
+      border-color: var(--tg-light-blue);
+      color: var(--tg-brown);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .btn-primary {
+        background: var(--tg-light-blue);
+        border-color: var(--tg-light-blue);
+        color: var(--tg-brown);
+      }
+    }
+
+    /* Status & stats strip */
+    .status-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      font-size: 12.5px;
+    }
+
+    .status-left {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .status-dot.loading { background: #f59e0b; }
+    .status-dot.error { background: #ef4444; }
+
+    .status-source {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .stats-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .stat-pill {
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: var(--surface-alt);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-pill strong { color: var(--text); font-weight: 600; }
+
+    /* Alerts */
+    .banner {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      margin-bottom: 18px;
+      font-size: 13px;
+      display: none;
+    }
+    .banner.show { display: block; }
+    .banner.warn {
+      background: var(--warn-bg);
+      border: 1px solid var(--warn-border);
+      color: var(--warn-fg);
+    }
+    .banner.err {
+      background: var(--err-bg);
+      border: 1px solid var(--err-border);
+      color: var(--err-fg);
+    }
+
+    /* Controls toolbar */
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .segmented {
+      display: inline-flex;
+      background: var(--surface-alt);
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .segmented button {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      padding: 6px 13px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      white-space: nowrap;
+    }
+
+    .segmented button.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: var(--shadow);
+      font-weight: 600;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      justify-content: flex-end;
+    }
+
+    .search-input, .select-input {
+      padding: 7px 11px;
+      border-radius: 7px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+    }
+    .search-input:focus, .select-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+    .search-input { min-width: 210px; }
+    .select-input { min-width: 230px; }
+
+    .method-pills {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .method-pills-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-right: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .method-chip {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.12s;
+      user-select: none;
+    }
+    .method-chip:hover { border-color: var(--accent); color: var(--text); }
+    .method-chip.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent-text);
+      font-weight: 600;
+    }
+
+    /* Card & Table */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+
+    thead th {
+      background: var(--surface-alt);
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: right;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    thead th.left { text-align: left; }
+    thead th:hover { color: var(--text); }
+    thead th.sorted { color: var(--accent); }
+
+    .sort-arrow {
+      display: inline-block;
+      margin-left: 4px;
+      font-size: 10px;
+      opacity: 0.45;
+    }
+    thead th.sorted .sort-arrow { opacity: 1; }
+
+    .th-sub {
+      display: block;
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--text-faint);
+      margin-top: 1px;
+    }
+
+    tbody td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: right;
+      white-space: nowrap;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--surface-hover); }
+
+    tbody td.left { text-align: left; }
+
+    .rank-cell {
+      font-weight: 600;
+      color: var(--text-muted);
+      width: 58px;
+    }
+    .rank-1 { color: var(--accent); font-weight: 700; }
+    .rank-2 { color: var(--text); font-weight: 700; }
+    .rank-3 { color: var(--text); font-weight: 600; }
+    .mean-rank-sub {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 400;
+      color: var(--text-faint);
+    }
+
+    .model-name {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .method-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .method-linear { background: var(--badge-linear-bg); color: var(--badge-linear-fg); }
+    .method-chunked { background: var(--badge-chunked-bg); color: var(--badge-chunked-fg); }
+    .method-spatial { background: var(--badge-spatial-bg); color: var(--badge-spatial-fg); }
+    .method-other { background: var(--badge-other-bg); color: var(--badge-other-fg); }
+
+    .muted { color: var(--text-faint); }
+    .std { color: var(--text-muted); font-size: 11.5px; font-weight: 400; }
+
+    .score-best {
+      background: var(--best-bg) !important;
+      color: var(--best-text);
+      font-weight: 700;
+    }
+    .score-second {
+      background: var(--second-bg) !important;
+      font-weight: 600;
+    }
+
+    .dataset-bar-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-alt);
+    }
+
+    .dataset-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    .domain-badge {
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+    }
+
+    .empty-state {
+      padding: 48px 24px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .empty-state h3 { margin: 0 0 6px; color: var(--text); font-size: 15px; }
+    .empty-state p { margin: 0 0 14px; font-size: 13px; }
+
+    /* Dropzone overlay */
+    body.drag-over::after {
+      content: "Drop CoordBench CSV to load";
+      position: fixed;
+      inset: 16px;
+      background: rgba(128, 160, 216, 0.18);
+      border: 2px dashed var(--tg-periwinkle);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      z-index: 9999;
+      pointer-events: none;
+      backdrop-filter: blur(2px);
+    }
+
+    footer {
+      margin-top: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 720px) {
+      .container { padding: 18px 12px 40px; }
+      .brand h1 { font-size: 20px; }
+      .search-input, .select-input { width: 100%; min-width: 0; }
+      .filters { width: 100%; justify-content: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <div class="tg-topbar">
+    <div class="tg-topbar-brand">
+      <span class="tg-eyebrow">Taylor Geospatial &middot; EarthINR</span>
+    </div>
+    <nav class="tg-nav" aria-label="Primary">
+      <a href="index.html" class="active" aria-current="page">Leaderboard</a>
+      <a href="demo.html">Live WebGPU Demo</a>
+    </nav>
+  </div>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <h1>
+          CoordBench Leaderboard
+          <span class="brand-tag">EarthINR</span>
+        </h1>
+        <p>
+          Benchmark results for geographic Implicit Neural Representations (INRs),
+          coordinate encoders, and spatial interpolation baselines under random and spatial block cross-validation.
+        </p>
+      </div>
+      <div class="header-actions">
+        <label class="btn btn-primary" for="csv-file-input" title="Inspect a local coordbench_results.csv file">
+          Load local CSV
+        </label>
+        <input id="csv-file-input" type="file" accept=".csv,text/csv" class="hidden" />
+        <button id="copy-md-btn" class="btn" type="button" title="Copy current table as GitHub-flavored Markdown">
+          Copy Markdown
+        </button>
+        <button id="theme-toggle" class="btn" type="button" title="Toggle light / dark theme">
+          Theme
+        </button>
+      </div>
+    </header>
+
+    <div class="status-bar">
+      <div class="status-left">
+        <span id="status-dot" class="status-dot loading"></span>
+        <span id="status-text">Loading CoordBench results&hellip;</span>
+        <span id="status-source" class="status-source"></span>
+      </div>
+      <div id="stats-pills" class="stats-pills"></div>
+    </div>
+
+    <div id="banner" class="banner"></div>
+
+    <div class="toolbar">
+      <div class="segmented" role="tablist" aria-label="Leaderboard View">
+        <button id="tab-macro" class="active" type="button" role="tab" aria-selected="true">
+          Macro Leaderboard
+        </button>
+        <button id="tab-dataset" type="button" role="tab" aria-selected="false">
+          Per-Dataset View
+        </button>
+      </div>
+
+      <div id="split-selector-wrap" class="segmented" role="group" aria-label="Split Selector"></div>
+
+      <div class="filters">
+        <input
+          id="search-input"
+          class="search-input"
+          type="search"
+          placeholder="Filter model or method&hellip;"
+          aria-label="Filter model or method"
+        />
+      </div>
+    </div>
+
+    <div id="method-pills" class="method-pills"></div>
+
+    <!-- Macro Leaderboard Card -->
+    <section id="macro-section" class="card">
+      <div class="table-wrap">
+        <table id="macro-table">
+          <thead>
+            <tr>
+              <th class="left" data-sort="rank">Rank <span class="sort-arrow"></span><span class="th-sub">avg rank</span></th>
+              <th class="left" data-sort="model_name">Model <span class="sort-arrow"></span></th>
+              <th class="left" data-sort="method">Method <span class="sort-arrow"></span></th>
+              <th data-sort="feature_dim">Dim <span class="sort-arrow"></span></th>
+              <th data-sort="overallReg">Overall Reg R&sup2; <span class="sort-arrow"></span><span class="th-sub" id="th-reg-n"></span></th>
+              <th data-sort="overallCls">Overall Cls Acc <span class="sort-arrow"></span><span class="th-sub" id="th-cls-n"></span></th>
+              <th data-sort="envScore">Env R&sup2; <span class="sort-arrow"></span><span class="th-sub" id="th-env-n"></span></th>
+              <th data-sort="landScore">Land Acc <span class="sort-arrow"></span><span class="th-sub" id="th-land-n"></span></th>
+              <th data-sort="socioScore">Socio R&sup2; <span class="sort-arrow"></span><span class="th-sub" id="th-socio-n"></span></th>
+              <th data-sort="nDatasets">Datasets <span class="sort-arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="macro-tbody"></tbody>
+        </table>
+      </div>
+      <div id="macro-empty" class="empty-state hidden">
+        <h3>No matching results</h3>
+        <p>Try clearing your search query, selecting additional methods, or loading a local CSV file.</p>
+      </div>
+    </section>
+
+    <!-- Per-Dataset Comparison Card -->
+    <section id="dataset-section" class="card hidden">
+      <div class="dataset-bar-header">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label for="dataset-select" style="font-weight:600;font-size:13px;">Dataset:</label>
+          <select id="dataset-select" class="select-input"></select>
+        </div>
+        <div id="dataset-meta" class="dataset-meta"></div>
+      </div>
+      <div class="table-wrap">
+        <table id="dataset-table">
+          <thead id="dataset-thead"></thead>
+          <tbody id="dataset-tbody"></tbody>
+        </table>
+      </div>
+      <div id="dataset-empty" class="empty-state hidden">
+        <h3>No dataset rows to display</h3>
+        <p>Select a dataset above or adjust the model/method filters.</p>
+      </div>
+    </section>
+
+    <footer>
+      <div>
+        Aggregation matches <code>earthinr.coordbench.leaderboard</code> &amp; <code>taxonomy.py</code>:
+        regression R&sup2; floored at <code>-1.0</code>, multi-target datasets averaged to one score per
+        <code>(model, method, dataset, split, cell_deg)</code>, and <code>(model, method)</code> ranked separately.
+      </div>
+      <div>
+        <a href="https://github.com/taylor-geospatial/earthinr" target="_blank" rel="noopener">taylor-geospatial/earthinr</a>
+        &middot; Drop any CoordBench CSV onto this page to inspect locally.
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      // --- Exact taxonomy from src/earthinr/coordbench/taxonomy.py ---
+      const R2_FLOOR = -1.0;
+
+      const SOCIO = new Set([
+        'pdfm-conus27',
+        'california-housing',
+        'mosaiks-population',
+        'mosaiks-nightlights',
+        'mosaiks-income',
+        'mosaiks-housing',
+        'mosaiks-roads',
+        'satclip-population',
+        'bt-population',
+        'bt-distroad',
+        'sustainbench-asset',
+        'sustainbench-water',
+        'sustainbench-sanitation',
+        'sustainbench-child_mortality',
+        'sustainbench-women_edu',
+        'sustainbench-women_bmi',
+        'places-asthma',
+        'places-cancer',
+        'places-chd',
+        'places-checkup',
+        'places-copd',
+        'places-diabetes',
+        'places-high_chol',
+        'places-mental_health',
+        'places-obesity',
+        'places-phys_health',
+        'places-sleep_lt7',
+        'places-smoking',
+      ]);
+
+      const ENV = new Set([
+        'worldclim-bio1',
+        'worldclim-bio12',
+        'soilgrids-soc',
+        'soilgrids-phh2o',
+        'dm-aster_ged',
+        'dm-openet_ensemble',
+        'mosaiks-elevation',
+        'mosaiks-treecover',
+        'satclip-elevation',
+        'satclip-air-temp',
+        'bt-biomass',
+        'bt-bioclim',
+      ]);
+
+      const LAND = new Set([
+        'dm-africa_crop_mask',
+        'dm-canada_crops_coarse',
+        'dm-canada_crops_fine',
+        'dm-descals',
+        'dm-ethiopia_crops',
+        'dm-glance',
+        'dm-lcmap_lc',
+        'dm-lcmap_lcc',
+        'dm-lcmap_lu',
+        'dm-lcmap_luc',
+        'dm-lucas_lc',
+        'dm-lucas_lu',
+        'dm-us_trees',
+        'satclip-biome',
+        'satclip-country',
+        'satclip-ecoregion',
+        'country',
+        'ecoregions',
+        'bt-cropharvest',
+        'bt-landcover',
+      ]);
+
+      function familyOf(datasetName) {
+        if (SOCIO.has(datasetName)) return 'socio';
+        if (ENV.has(datasetName)) return 'env';
+        if (LAND.has(datasetName)) return 'land';
+        return 'other';
+      }
+
+      const DOMAIN_LABELS = {
+        env: 'Environment',
+        land: 'Land Cover & Use',
+        socio: 'Socioeconomic',
+        other: 'Other',
+      };
+
+      const CSV_SOURCES = [
+        { label: '../results/coordbench_results.csv', url: '../results/coordbench_results.csv' },
+        {
+          label: 'GitHub main (results/coordbench_results.csv)',
+          url: 'https://raw.githubusercontent.com/taylor-geospatial/earthinr/main/results/coordbench_results.csv',
+        },
+      ];
+
+      // --- State ---
+      const state = {
+        rawRows: [],
+        sourceLabel: '',
+        view: 'macro', // 'macro' | 'dataset'
+        splits: [], // [{ key, split, cellDeg, label }]
+        selectedSplitKey: null,
+        methods: [], // all unique methods in CSV
+        activeMethods: new Set(), // empty = all
+        search: '',
+        macroSort: { col: 'rank', dir: 'asc' },
+        selectedDataset: null,
+        datasetSort: { col: null, dir: 'desc' },
+      };
+
+      // --- CSV Parser (RFC 4180 compliant) ---
+      function parseCSV(text) {
+        const rows = [];
+        let field = '';
+        let row = [];
+        let inQuotes = false;
+
+        for (let i = 0; i < text.length; i++) {
+          const ch = text[i];
+          if (inQuotes) {
+            if (ch === '"') {
+              if (text[i + 1] === '"') {
+                field += '"';
+                i++;
+              } else {
+                inQuotes = false;
+              }
+            } else {
+              field += ch;
+            }
+          } else {
+            if (ch === '"') {
+              inQuotes = true;
+            } else if (ch === ',') {
+              row.push(field);
+              field = '';
+            } else if (ch === '\r') {
+              if (text[i + 1] === '\n') i++;
+              row.push(field);
+              rows.push(row);
+              row = [];
+              field = '';
+            } else if (ch === '\n') {
+              row.push(field);
+              rows.push(row);
+              row = [];
+              field = '';
+            } else {
+              field += ch;
+            }
+          }
+        }
+        if (field.length > 0 || row.length > 0) {
+          row.push(field);
+          rows.push(row);
+        }
+
+        if (rows.length < 2) return [];
+        const header = rows[0].map((h) => h.trim().replace(/^\uFEFF/, ''));
+        const out = [];
+        for (let r = 1; r < rows.length; r++) {
+          const cols = rows[r];
+          if (cols.length === 1 && cols[0].trim() === '') continue;
+          const obj = {};
+          for (let c = 0; c < header.length; c++) {
+            obj[header[c]] = cols[c] !== undefined ? cols[c].trim() : '';
+          }
+          out.push(obj);
+        }
+        return out;
+      }
+
+      function numOrNull(v) {
+        if (v === undefined || v === null || v === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      function canonicalCellDeg(v) {
+        const n = numOrNull(v);
+        return n === null ? 0 : Number(n.toPrecision(6));
+      }
+
+      function splitKey(split, cellDeg) {
+        const s = String(split || 'unknown').toLowerCase();
+        const deg = s === 'spatial' ? canonicalCellDeg(cellDeg) : 0;
+        return `${s}::${deg}`;
+      }
+
+      function splitLabel(split, cellDeg) {
+        const s = String(split || 'unknown').toLowerCase();
+        if (s === 'random') return 'Random';
+        if (s === 'spatial') {
+          const deg = canonicalCellDeg(cellDeg);
+          return deg > 0 ? `Spatial ${deg}\u00B0` : 'Spatial';
+        }
+        if (s === 'official') return 'Official';
+        return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      }
+
+      function compareSplits(a, b) {
+        const order = (s) => (s.split === 'random' ? 0 : s.split === 'spatial' ? 1 : s.split === 'official' ? 2 : 3);
+        const oa = order(a);
+        const ob = order(b);
+        if (oa !== ob) return oa - ob;
+        if (a.cellDeg !== b.cellDeg) return a.cellDeg - b.cellDeg;
+        return a.label.localeCompare(b.label);
+      }
+
+      function normalizeRows(raw) {
+        const normalized = [];
+        for (const r of raw) {
+          if (!r.model_name || !r.dataset) continue;
+          const metricVal = numOrNull(r.metric_value);
+          if (metricVal === null) continue;
+          const metricName = (r.metric_name || '').toLowerCase();
+          const taskType = (r.task_type || (metricName === 'accuracy' ? 'classification' : 'regression')).toLowerCase();
+          const split = (r.split || 'random').toLowerCase();
+          const cellDeg = split === 'spatial' ? canonicalCellDeg(r.cell_deg) : 0;
+          const ciLower = numOrNull(r.ci_lower);
+          const ciUpper = numOrNull(r.ci_upper);
+          const std = ciLower !== null && ciUpper !== null ? Math.abs(ciUpper - ciLower) / 2 : null;
+          const floored = metricName === 'r2' ? Math.max(R2_FLOOR, metricVal) : metricVal;
+
+          normalized.push({
+            dataset: r.dataset,
+            task: r.task || r.dataset,
+            task_type: taskType,
+            method: r.method || 'linear',
+            split,
+            cell_deg: cellDeg,
+            split_key: splitKey(split, cellDeg),
+            metric_name: metricName || (taskType === 'classification' ? 'accuracy' : 'r2'),
+            metric_value: metricVal,
+            floored_value: floored,
+            ci_lower: ciLower,
+            ci_upper: ciUpper,
+            std,
+            n_folds: numOrNull(r.n_folds),
+            feature_dim: numOrNull(r.feature_dim) ?? 0,
+            n_samples: numOrNull(r.n_samples),
+            n_test: numOrNull(r.n_test),
+            model_name: r.model_name,
+            model_target: r.model_target || '',
+            family: familyOf(r.dataset),
+          });
+        }
+        return normalized;
+      }
+
+      // Collapse multi-target datasets to 1 score per (model_name, method, dataset, split_key)
+      function collapseDatasetScores(rows) {
+        const buckets = new Map();
+        for (const r of rows) {
+          const key = `${r.model_name}\u0000${r.method}\u0000${r.dataset}\u0000${r.split_key}`;
+          let b = buckets.get(key);
+          if (!b) {
+            b = {
+              model_name: r.model_name,
+              method: r.method,
+              dataset: r.dataset,
+              split: r.split,
+              cell_deg: r.cell_deg,
+              split_key: r.split_key,
+              family: r.family,
+              task_type: r.task_type,
+              metric_name: r.metric_name,
+              feature_dim: r.feature_dim,
+              n_samples: r.n_samples,
+              n_folds: r.n_folds,
+              sumScore: 0,
+              sumRaw: 0,
+              sumStd: 0,
+              stdCount: 0,
+              count: 0,
+              ci_lower: r.ci_lower,
+              ci_upper: r.ci_upper,
+            };
+            buckets.set(key, b);
+          }
+          b.sumScore += r.floored_value;
+          b.sumRaw += r.metric_value;
+          if (r.std !== null) {
+            b.sumStd += r.std;
+            b.stdCount += 1;
+          }
+          b.count += 1;
+          if (r.feature_dim > b.feature_dim) b.feature_dim = r.feature_dim;
+        }
+
+        const out = [];
+        for (const b of buckets.values()) {
+          out.push({
+            model_name: b.model_name,
+            method: b.method,
+            entry_key: `${b.model_name}\u0000${b.method}`,
+            dataset: b.dataset,
+            split: b.split,
+            cell_deg: b.cell_deg,
+            split_key: b.split_key,
+            family: b.family,
+            task_type: b.task_type,
+            metric_name: b.metric_name,
+            feature_dim: b.feature_dim,
+            n_samples: b.n_samples,
+            n_folds: b.n_folds,
+            n_tasks: b.count,
+            score: b.sumScore / b.count,
+            raw_score: b.sumRaw / b.count,
+            std: b.stdCount > 0 ? b.sumStd / b.stdCount : null,
+            ci_lower: b.count === 1 ? b.ci_lower : null,
+            ci_upper: b.count === 1 ? b.ci_upper : null,
+          });
+        }
+        return out;
+      }
+
+      // Compute average ranks (1 = best, ties receive average rank) matching pandas rank(ascending=False, method='average')
+      function assignAverageRanks(items, valueFn) {
+        const sorted = items.slice().sort((a, b) => valueFn(b) - valueFn(a));
+        const rankMap = new Map();
+        let i = 0;
+        while (i < sorted.length) {
+          let j = i;
+          const val = valueFn(sorted[i]);
+          while (j + 1 < sorted.length && valueFn(sorted[j + 1]) === val) {
+            j++;
+          }
+          const avgRank = (i + 1 + (j + 1)) / 2;
+          for (let k = i; k <= j; k++) {
+            rankMap.set(sorted[k], avgRank);
+          }
+          i = j + 1;
+        }
+        return rankMap;
+      }
+
+      function computeMacroLeaderboard(collapsed, splitKeySelected) {
+        // Match leaderboard.py: include selected split plus 'official' rows if present
+        const splitRows = collapsed.filter(
+          (r) => r.split_key === splitKeySelected || r.split === 'official'
+        );
+        // Deduplicate if an entry has both selected split and official for same dataset (prefer selected split)
+        const dedup = new Map();
+        for (const r of splitRows) {
+          const k = `${r.entry_key}\u0000${r.dataset}`;
+          const prev = dedup.get(k);
+          if (!prev || r.split_key === splitKeySelected) {
+            dedup.set(k, r);
+          }
+        }
+        const activeRows = Array.from(dedup.values());
+
+        // Count unique datasets per category in this split
+        const allDatasets = new Set();
+        const regDatasets = new Set();
+        const clsDatasets = new Set();
+        const envDatasets = new Set();
+        const landDatasets = new Set();
+        const socioDatasets = new Set();
+
+        const byDataset = new Map();
+        for (const r of activeRows) {
+          allDatasets.add(r.dataset);
+          if (r.metric_name === 'r2' || r.task_type === 'regression') regDatasets.add(r.dataset);
+          if (r.metric_name === 'accuracy' || r.task_type === 'classification') clsDatasets.add(r.dataset);
+          if (r.family === 'env') envDatasets.add(r.dataset);
+          if (r.family === 'land') landDatasets.add(r.dataset);
+          if (r.family === 'socio') socioDatasets.add(r.dataset);
+
+          if (!byDataset.has(r.dataset)) byDataset.set(r.dataset, []);
+          byDataset.get(r.dataset).push(r);
+        }
+
+        // Per-dataset ranks across all (model, method) entries
+        const rowRank = new Map();
+        for (const list of byDataset.values()) {
+          const rmap = assignAverageRanks(list, (x) => x.score);
+          for (const [item, rk] of rmap.entries()) {
+            rowRank.set(item, rk);
+          }
+        }
+
+        // Aggregate per (model_name, method)
+        const byEntry = new Map();
+        for (const r of activeRows) {
+          let e = byEntry.get(r.entry_key);
+          if (!e) {
+            e = {
+              model_name: r.model_name,
+              method: r.method,
+              feature_dim: r.feature_dim,
+              ranks: [],
+              regScores: [],
+              clsScores: [],
+              envScores: [],
+              landScores: [],
+              socioScores: [],
+              nDatasets: 0,
+            };
+            byEntry.set(r.entry_key, e);
+          }
+          if (r.feature_dim > e.feature_dim) e.feature_dim = r.feature_dim;
+          e.ranks.push(rowRank.get(r));
+          if (r.metric_name === 'r2' || r.task_type === 'regression') e.regScores.push(r.score);
+          if (r.metric_name === 'accuracy' || r.task_type === 'classification') e.clsScores.push(r.score);
+          if (r.family === 'env') e.envScores.push(r.score);
+          if (r.family === 'land') e.landScores.push(r.score);
+          if (r.family === 'socio') e.socioScores.push(r.score);
+          e.nDatasets += 1;
+        }
+
+        const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+        const rows = [];
+        for (const e of byEntry.values()) {
+          rows.push({
+            model_name: e.model_name,
+            method: e.method,
+            feature_dim: e.feature_dim,
+            meanRank: mean(e.ranks),
+            overallReg: mean(e.regScores),
+            overallCls: mean(e.clsScores),
+            envScore: mean(e.envScores),
+            landScore: mean(e.landScores),
+            socioScore: mean(e.socioScores),
+            nDatasets: e.nDatasets,
+            totalDatasets: allDatasets.size,
+          });
+        }
+
+        // Assign canonical rank by ascending meanRank (tie-break by overallReg desc, overallCls desc, model_name asc)
+        rows.sort((a, b) => {
+          if (a.meanRank !== b.meanRank) return a.meanRank - b.meanRank;
+          if ((b.overallReg ?? -99) !== (a.overallReg ?? -99)) return (b.overallReg ?? -99) - (a.overallReg ?? -99);
+          if ((b.overallCls ?? -99) !== (a.overallCls ?? -99)) return (b.overallCls ?? -99) - (a.overallCls ?? -99);
+          return a.model_name.localeCompare(b.model_name);
+        });
+        rows.forEach((r, idx) => {
+          r.rank = idx + 1;
+        });
+
+        return {
+          rows,
+          counts: {
+            total: allDatasets.size,
+            reg: regDatasets.size,
+            cls: clsDatasets.size,
+            env: envDatasets.size,
+            land: landDatasets.size,
+            socio: socioDatasets.size,
+          },
+        };
+      }
+
+      // --- Formatting helpers ---
+      function fmtScore(val) {
+        if (val === null || val === undefined || !Number.isFinite(val)) return '\u2014';
+        return val.toFixed(4);
+      }
+
+      function fmtStd(val) {
+        if (val === null || val === undefined || !Number.isFinite(val)) return '';
+        return `\u00B1 ${val.toFixed(3)}`;
+      }
+
+      function fmtDim(dim) {
+        return dim && dim > 0 ? String(dim) : '\u2014';
+      }
+
+      function methodBadgeClass(method) {
+        const m = String(method || '').toLowerCase();
+        if (m === 'linear') return 'method-linear';
+        if (m === 'chunked') return 'method-chunked';
+        if (m === 'idw' || m === 'kriging') return 'method-spatial';
+        return 'method-other';
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      // --- DOM Refs ---
+      const el = {
+        statusDot: document.getElementById('status-dot'),
+        statusText: document.getElementById('status-text'),
+        statusSource: document.getElementById('status-source'),
+        statsPills: document.getElementById('stats-pills'),
+        banner: document.getElementById('banner'),
+        tabMacro: document.getElementById('tab-macro'),
+        tabDataset: document.getElementById('tab-dataset'),
+        splitWrap: document.getElementById('split-selector-wrap'),
+        searchInput: document.getElementById('search-input'),
+        methodPills: document.getElementById('method-pills'),
+        macroSection: document.getElementById('macro-section'),
+        macroTable: document.getElementById('macro-table'),
+        macroTbody: document.getElementById('macro-tbody'),
+        macroEmpty: document.getElementById('macro-empty'),
+        datasetSection: document.getElementById('dataset-section'),
+        datasetSelect: document.getElementById('dataset-select'),
+        datasetMeta: document.getElementById('dataset-meta'),
+        datasetThead: document.getElementById('dataset-thead'),
+        datasetTbody: document.getElementById('dataset-tbody'),
+        datasetEmpty: document.getElementById('dataset-empty'),
+        fileInput: document.getElementById('csv-file-input'),
+        copyMdBtn: document.getElementById('copy-md-btn'),
+        themeToggle: document.getElementById('theme-toggle'),
+        thRegN: document.getElementById('th-reg-n'),
+        thClsN: document.getElementById('th-cls-n'),
+        thEnvN: document.getElementById('th-env-n'),
+        thLandN: document.getElementById('th-land-n'),
+        thSocioN: document.getElementById('th-socio-n'),
+      };
+
+      function setStatus(kind, text, source) {
+        el.statusDot.className = `status-dot ${kind === 'ok' ? '' : kind}`;
+        el.statusText.textContent = text;
+        el.statusSource.textContent = source || '';
+      }
+
+      function showBanner(kind, html) {
+        if (!html) {
+          el.banner.className = 'banner';
+          el.banner.innerHTML = '';
+          return;
+        }
+        el.banner.className = `banner show ${kind}`;
+        el.banner.innerHTML = html;
+      }
+
+      // --- Filter helpers ---
+      function matchesFilters(row) {
+        if (state.activeMethods.size > 0 && !state.activeMethods.has(row.method)) {
+          return false;
+        }
+        if (state.search) {
+          const q = state.search.toLowerCase();
+          const hay = `${row.model_name} ${row.method}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      }
+
+      // --- Rendering ---
+      function renderStatsPills(collapsed) {
+        const models = new Set(collapsed.map((r) => `${r.model_name}::${r.method}`));
+        const datasets = new Set(collapsed.map((r) => r.dataset));
+        const splits = new Set(collapsed.map((r) => r.split_key));
+        el.statsPills.innerHTML = `
+          <span class="stat-pill"><strong>${models.size}</strong> model&times;method</span>
+          <span class="stat-pill"><strong>${datasets.size}</strong> datasets</span>
+          <span class="stat-pill"><strong>${splits.size}</strong> splits</span>
+          <span class="stat-pill"><strong>${state.rawRows.length}</strong> rows</span>
+        `;
+      }
+
+      function renderSplitSelector() {
+        el.splitWrap.innerHTML = '';
+        if (state.view !== 'macro' || state.splits.length === 0) {
+          el.splitWrap.classList.add('hidden');
+          return;
+        }
+        el.splitWrap.classList.remove('hidden');
+        for (const sp of state.splits) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = sp.label;
+          if (sp.key === state.selectedSplitKey) btn.classList.add('active');
+          btn.addEventListener('click', () => {
+            state.selectedSplitKey = sp.key;
+            renderSplitSelector();
+            renderMacro();
+          });
+          el.splitWrap.appendChild(btn);
+        }
+      }
+
+      function renderMethodPills() {
+        el.methodPills.innerHTML = '';
+        if (state.methods.length === 0) return;
+
+        const label = document.createElement('span');
+        label.className = 'method-pills-label';
+        label.textContent = 'Methods:';
+        el.methodPills.appendChild(label);
+
+        const allBtn = document.createElement('button');
+        allBtn.type = 'button';
+        allBtn.className = `method-chip ${state.activeMethods.size === 0 ? 'active' : ''}`;
+        allBtn.textContent = 'all';
+        allBtn.addEventListener('click', () => {
+          state.activeMethods.clear();
+          renderMethodPills();
+          renderCurrentView();
+        });
+        el.methodPills.appendChild(allBtn);
+
+        for (const m of state.methods) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `method-chip ${state.activeMethods.has(m) ? 'active' : ''}`;
+          btn.textContent = m;
+          btn.addEventListener('click', () => {
+            if (state.activeMethods.has(m)) {
+              state.activeMethods.delete(m);
+            } else {
+              state.activeMethods.add(m);
+            }
+            renderMethodPills();
+            renderCurrentView();
+          });
+          el.methodPills.appendChild(btn);
+        }
+      }
+
+      function renderDatasetDropdown(collapsed) {
+        const dsMap = new Map();
+        for (const r of collapsed) {
+          if (!dsMap.has(r.dataset)) {
+            dsMap.set(r.dataset, {
+              dataset: r.dataset,
+              family: r.family,
+              metric_name: r.metric_name,
+              task_type: r.task_type,
+              n_samples: r.n_samples,
+            });
+          }
+        }
+        const byDomain = { env: [], land: [], socio: [], other: [] };
+        for (const info of dsMap.values()) {
+          (byDomain[info.family] || byDomain.other).push(info);
+        }
+        for (const k of Object.keys(byDomain)) {
+          byDomain[k].sort((a, b) => a.dataset.localeCompare(b.dataset));
+        }
+
+        el.datasetSelect.innerHTML = '';
+        const allOrdered = [];
+        for (const dom of ['env', 'land', 'socio', 'other']) {
+          if (byDomain[dom].length === 0) continue;
+          const grp = document.createElement('optgroup');
+          grp.label = `${DOMAIN_LABELS[dom]} (${byDomain[dom].length})`;
+          for (const info of byDomain[dom]) {
+            const opt = document.createElement('option');
+            opt.value = info.dataset;
+            opt.textContent = `${info.dataset} (${info.metric_name})`;
+            grp.appendChild(opt);
+            allOrdered.push(info.dataset);
+          }
+          el.datasetSelect.appendChild(grp);
+        }
+
+        if (!state.selectedDataset || !dsMap.has(state.selectedDataset)) {
+          state.selectedDataset = allOrdered[0] || null;
+        }
+        if (state.selectedDataset) {
+          el.datasetSelect.value = state.selectedDataset;
+        }
+      }
+
+      function topTwoValues(rows, getter) {
+        const vals = rows
+          .map(getter)
+          .filter((v) => v !== null && v !== undefined && Number.isFinite(v))
+          .sort((a, b) => b - a);
+        const uniq = [];
+        for (const v of vals) {
+          if (uniq.length === 0 || Math.abs(v - uniq[uniq.length - 1]) > 1e-12) {
+            uniq.push(v);
+          }
+          if (uniq.length === 2) break;
+        }
+        return { best: uniq[0] ?? null, second: uniq[1] ?? null };
+      }
+
+      function scoreHighlightClass(val, top2) {
+        if (val === null || val === undefined || !Number.isFinite(val)) return 'muted';
+        if (top2.best !== null && Math.abs(val - top2.best) <= 1e-12) return 'score-best';
+        if (top2.second !== null && Math.abs(val - top2.second) <= 1e-12) return 'score-second';
+        return '';
+      }
+
+      function renderMacro() {
+        const collapsed = collapseDatasetScores(state.rawRows);
+        const { rows: allRows, counts } = computeMacroLeaderboard(collapsed, state.selectedSplitKey);
+
+        el.thRegN.textContent = counts.reg ? `n=${counts.reg}` : '';
+        el.thClsN.textContent = counts.cls ? `n=${counts.cls}` : '';
+        el.thEnvN.textContent = counts.env ? `n=${counts.env}` : '';
+        el.thLandN.textContent = counts.land ? `n=${counts.land}` : '';
+        el.thSocioN.textContent = counts.socio ? `n=${counts.socio}` : '';
+
+        const filtered = allRows.filter(matchesFilters);
+
+        // Sort
+        const { col, dir } = state.macroSort;
+        const mult = dir === 'asc' ? 1 : -1;
+        filtered.sort((a, b) => {
+          const va = a[col];
+          const vb = b[col];
+          if (typeof va === 'string' || typeof vb === 'string') {
+            return mult * String(va || '').localeCompare(String(vb || ''));
+          }
+          const na = va === null || va === undefined || !Number.isFinite(va);
+          const nb = vb === null || vb === undefined || !Number.isFinite(vb);
+          if (na && nb) return a.rank - b.rank;
+          if (na) return 1;
+          if (nb) return -1;
+          if (va !== vb) return mult * (va - vb);
+          return a.rank - b.rank;
+        });
+
+        // Update header sort indicators
+        el.macroTable.querySelectorAll('thead th').forEach((th) => {
+          const key = th.dataset.sort;
+          const arrow = th.querySelector('.sort-arrow');
+          if (key === col) {
+            th.classList.add('sorted');
+            if (arrow) arrow.textContent = dir === 'asc' ? '\u25B2' : '\u25BC';
+          } else {
+            th.classList.remove('sorted');
+            if (arrow) arrow.textContent = '\u21C5';
+          }
+        });
+
+        if (filtered.length === 0) {
+          el.macroTbody.innerHTML = '';
+          el.macroEmpty.classList.remove('hidden');
+          return;
+        }
+        el.macroEmpty.classList.add('hidden');
+
+        const topReg = topTwoValues(filtered, (r) => r.overallReg);
+        const topCls = topTwoValues(filtered, (r) => r.overallCls);
+        const topEnv = topTwoValues(filtered, (r) => r.envScore);
+        const topLand = topTwoValues(filtered, (r) => r.landScore);
+        const topSocio = topTwoValues(filtered, (r) => r.socioScore);
+
+        el.macroTbody.innerHTML = filtered
+          .map((r, idx) => {
+            const dispRank = idx + 1;
+            const rankCls = dispRank === 1 ? 'rank-1' : dispRank === 2 ? 'rank-2' : dispRank === 3 ? 'rank-3' : '';
+            const partial = r.nDatasets < r.totalDatasets;
+            return `<tr>
+              <td class="left rank-cell ${rankCls}">
+                #${dispRank}
+                <span class="mean-rank-sub" title="Mean rank across ${r.nDatasets} dataset(s)">${r.meanRank.toFixed(2)}</span>
+              </td>
+              <td class="left"><span class="model-name">${escapeHtml(r.model_name)}</span></td>
+              <td class="left"><span class="method-badge ${methodBadgeClass(r.method)}">${escapeHtml(r.method)}</span></td>
+              <td class="${r.feature_dim ? '' : 'muted'}">${fmtDim(r.feature_dim)}</td>
+              <td class="${scoreHighlightClass(r.overallReg, topReg)}">${fmtScore(r.overallReg)}</td>
+              <td class="${scoreHighlightClass(r.overallCls, topCls)}">${fmtScore(r.overallCls)}</td>
+              <td class="${scoreHighlightClass(r.envScore, topEnv)}">${fmtScore(r.envScore)}</td>
+              <td class="${scoreHighlightClass(r.landScore, topLand)}">${fmtScore(r.landScore)}</td>
+              <td class="${scoreHighlightClass(r.socioScore, topSocio)}">${fmtScore(r.socioScore)}</td>
+              <td class="${partial ? 'muted' : ''}" title="${partial ? 'Partial coverage in this split' : 'Full coverage in this split'}">${r.nDatasets} / ${r.totalDatasets}</td>
+            </tr>`;
+          })
+          .join('');
+      }
+
+      function renderDatasetView() {
+        const collapsed = collapseDatasetScores(state.rawRows);
+        const dsName = state.selectedDataset;
+        if (!dsName) {
+          el.datasetThead.innerHTML = '';
+          el.datasetTbody.innerHTML = '';
+          el.datasetEmpty.classList.remove('hidden');
+          return;
+        }
+
+        const dsRows = collapsed.filter((r) => r.dataset === dsName);
+        if (dsRows.length === 0) {
+          el.datasetThead.innerHTML = '';
+          el.datasetTbody.innerHTML = '';
+          el.datasetEmpty.classList.remove('hidden');
+          return;
+        }
+
+        // Available splits for this dataset
+        const spMap = new Map();
+        for (const r of dsRows) {
+          if (!spMap.has(r.split_key)) {
+            spMap.set(r.split_key, {
+              key: r.split_key,
+              split: r.split,
+              cellDeg: r.cell_deg,
+              label: splitLabel(r.split, r.cell_deg),
+            });
+          }
+        }
+        const dsSplits = Array.from(spMap.values()).sort(compareSplits);
+
+        // Dataset metadata header
+        const sampleRow = dsRows[0];
+        const metricLabel = sampleRow.metric_name === 'r2' ? 'R\u00B2 (floored at -1.0)' : sampleRow.metric_name;
+        const nSamplesStr = sampleRow.n_samples ? `N = ${sampleRow.n_samples.toLocaleString()}` : '';
+        const nTasksStr = sampleRow.n_tasks > 1 ? `${sampleRow.n_tasks} targets averaged` : '';
+        el.datasetMeta.innerHTML = `
+          <span class="domain-badge">${escapeHtml(DOMAIN_LABELS[sampleRow.family] || sampleRow.family)}</span>
+          <span>Task: <strong>${escapeHtml(sampleRow.task_type)}</strong></span>
+          <span>&middot; Metric: <strong>${escapeHtml(metricLabel)}</strong></span>
+          ${nSamplesStr ? `<span>&middot; ${escapeHtml(nSamplesStr)}</span>` : ''}
+          ${nTasksStr ? `<span>&middot; ${escapeHtml(nTasksStr)}</span>` : ''}
+        `;
+
+        // Group by (model_name, method)
+        const byEntry = new Map();
+        for (const r of dsRows) {
+          let e = byEntry.get(r.entry_key);
+          if (!e) {
+            e = {
+              model_name: r.model_name,
+              method: r.method,
+              feature_dim: r.feature_dim,
+              scores: {},
+            };
+            byEntry.set(r.entry_key, e);
+          }
+          if (r.feature_dim > e.feature_dim) e.feature_dim = r.feature_dim;
+          e.scores[r.split_key] = r;
+        }
+
+        const entries = Array.from(byEntry.values()).filter(matchesFilters);
+
+        // Default sort column: Spatial 10°, else first spatial split, else first available split
+        if (!state.datasetSort.col || (!spMap.has(state.datasetSort.col) && !['model_name', 'method', 'feature_dim'].includes(state.datasetSort.col))) {
+          const sp10 = dsSplits.find((s) => s.split === 'spatial' && s.cellDeg === 10);
+          const anySp = dsSplits.find((s) => s.split === 'spatial');
+          state.datasetSort.col = (sp10 || anySp || dsSplits[0]).key;
+          state.datasetSort.dir = 'desc';
+        }
+
+        const { col, dir } = state.datasetSort;
+        const mult = dir === 'asc' ? 1 : -1;
+        entries.sort((a, b) => {
+          if (col === 'model_name' || col === 'method') {
+            return mult * String(a[col]).localeCompare(String(b[col]));
+          }
+          if (col === 'feature_dim') {
+            return mult * (a.feature_dim - b.feature_dim);
+          }
+          const sa = a.scores[col]?.score ?? null;
+          const sb = b.scores[col]?.score ?? null;
+          if (sa === null && sb === null) return a.model_name.localeCompare(b.model_name);
+          if (sa === null) return 1;
+          if (sb === null) return -1;
+          if (sa !== sb) return mult * (sa - sb);
+          return a.model_name.localeCompare(b.model_name);
+        });
+
+        // Build thead
+        el.datasetThead.innerHTML = `<tr>
+          <th class="left" style="cursor:default;">Rank</th>
+          <th class="left ${col === 'model_name' ? 'sorted' : ''}" data-ds-sort="model_name">
+            Model <span class="sort-arrow">${col === 'model_name' ? (dir === 'asc' ? '\u25B2' : '\u25BC') : '\u21C5'}</span>
+          </th>
+          <th class="left ${col === 'method' ? 'sorted' : ''}" data-ds-sort="method">
+            Method <span class="sort-arrow">${col === 'method' ? (dir === 'asc' ? '\u25B2' : '\u25BC') : '\u21C5'}</span>
+          </th>
+          <th class="${col === 'feature_dim' ? 'sorted' : ''}" data-ds-sort="feature_dim">
+            Dim <span class="sort-arrow">${col === 'feature_dim' ? (dir === 'asc' ? '\u25B2' : '\u25BC') : '\u21C5'}</span>
+          </th>
+          ${dsSplits
+            .map((sp) => {
+              const isSorted = col === sp.key;
+              const arrow = isSorted ? (dir === 'asc' ? '\u25B2' : '\u25BC') : '\u21C5';
+              return `<th class="${isSorted ? 'sorted' : ''}" data-ds-sort="${escapeHtml(sp.key)}">
+                ${escapeHtml(sp.label)} <span class="sort-arrow">${arrow}</span>
+                <span class="th-sub">mean &plusmn; std</span>
+              </th>`;
+            })
+            .join('')}
+        </tr>`;
+
+        el.datasetThead.querySelectorAll('th[data-ds-sort]').forEach((th) => {
+          th.addEventListener('click', () => {
+            const key = th.dataset.dsSort;
+            if (state.datasetSort.col === key) {
+              state.datasetSort.dir = state.datasetSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+              state.datasetSort.col = key;
+              state.datasetSort.dir = key === 'model_name' || key === 'method' ? 'asc' : 'desc';
+            }
+            renderDatasetView();
+          });
+        });
+
+        if (entries.length === 0) {
+          el.datasetTbody.innerHTML = '';
+          el.datasetEmpty.classList.remove('hidden');
+          return;
+        }
+        el.datasetEmpty.classList.add('hidden');
+
+        // Top 2 per split column
+        const topBySplit = {};
+        for (const sp of dsSplits) {
+          topBySplit[sp.key] = topTwoValues(entries, (e) => e.scores[sp.key]?.score ?? null);
+        }
+
+        el.datasetTbody.innerHTML = entries
+          .map((e, idx) => {
+            const rank = idx + 1;
+            const rankCls = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
+            const splitCells = dsSplits
+              .map((sp) => {
+                const cell = e.scores[sp.key];
+                if (!cell) return `<td class="muted">&mdash;</td>`;
+                const cls = scoreHighlightClass(cell.score, topBySplit[sp.key]);
+                const ciTip =
+                  cell.ci_lower !== null && cell.ci_upper !== null
+                    ? `[${cell.ci_lower.toFixed(4)}, ${cell.ci_upper.toFixed(4)}]`
+                    : '';
+                const floorNote =
+                  cell.raw_score < R2_FLOOR && cell.metric_name === 'r2'
+                    ? ` (raw: ${cell.raw_score.toFixed(4)}, floored at ${R2_FLOOR})`
+                    : '';
+                const foldsNote = cell.n_folds ? ` | ${cell.n_folds} folds` : '';
+                const title = `${ciTip}${foldsNote}${floorNote}`.trim();
+                const stdHtml = cell.std !== null ? ` <span class="std">${fmtStd(cell.std)}</span>` : '';
+                return `<td class="${cls}" title="${escapeHtml(title)}">${fmtScore(cell.score)}${stdHtml}</td>`;
+              })
+              .join('');
+
+            return `<tr>
+              <td class="left rank-cell ${rankCls}">#${rank}</td>
+              <td class="left"><span class="model-name">${escapeHtml(e.model_name)}</span></td>
+              <td class="left"><span class="method-badge ${methodBadgeClass(e.method)}">${escapeHtml(e.method)}</span></td>
+              <td class="${e.feature_dim ? '' : 'muted'}">${fmtDim(e.feature_dim)}</td>
+              ${splitCells}
+            </tr>`;
+          })
+          .join('');
+      }
+
+      function renderCurrentView() {
+        if (state.view === 'macro') {
+          el.macroSection.classList.remove('hidden');
+          el.datasetSection.classList.add('hidden');
+          renderSplitSelector();
+          renderMacro();
+        } else {
+          el.macroSection.classList.add('hidden');
+          el.datasetSection.classList.remove('hidden');
+          renderSplitSelector();
+          renderDatasetView();
+        }
+      }
+
+      function loadCSVText(text, sourceLabel) {
+        const parsed = parseCSV(text);
+        const normalized = normalizeRows(parsed);
+        if (normalized.length === 0) {
+          setStatus('error', 'No valid CoordBench rows found in', sourceLabel);
+          showBanner('err', 'The loaded CSV did not contain valid CoordBench rows (expected columns: <code>model_name</code>, <code>dataset</code>, <code>metric_name</code>, <code>metric_value</code>, <code>method</code>, <code>split</code>).');
+          return;
+        }
+
+        state.rawRows = normalized;
+        state.sourceLabel = sourceLabel;
+        showBanner('', '');
+
+        // Discover splits
+        const spMap = new Map();
+        for (const r of normalized) {
+          if (!spMap.has(r.split_key)) {
+            spMap.set(r.split_key, {
+              key: r.split_key,
+              split: r.split,
+              cellDeg: r.cell_deg,
+              label: splitLabel(r.split, r.cell_deg),
+            });
+          }
+        }
+        state.splits = Array.from(spMap.values()).sort(compareSplits);
+
+        // Default split: Spatial 10° if present, else Random, else first
+        if (!state.selectedSplitKey || !spMap.has(state.selectedSplitKey)) {
+          const sp10 = state.splits.find((s) => s.split === 'spatial' && s.cellDeg === 10);
+          const rand = state.splits.find((s) => s.split === 'random');
+          state.selectedSplitKey = (sp10 || rand || state.splits[0]).key;
+        }
+
+        // Discover methods
+        const methodOrder = ['linear', 'chunked', 'idw', 'kriging'];
+        const methodSet = new Set(normalized.map((r) => r.method));
+        state.methods = Array.from(methodSet).sort((a, b) => {
+          const ia = methodOrder.indexOf(a);
+          const ib = methodOrder.indexOf(b);
+          if (ia !== -1 && ib !== -1) return ia - ib;
+          if (ia !== -1) return -1;
+          if (ib !== -1) return 1;
+          return a.localeCompare(b);
+        });
+        state.activeMethods.clear();
+
+        const collapsed = collapseDatasetScores(normalized);
+        setStatus('ok', 'Loaded', sourceLabel);
+        renderStatsPills(collapsed);
+        renderMethodPills();
+        renderDatasetDropdown(collapsed);
+        renderCurrentView();
+      }
+
+      async function autoLoadCSV() {
+        for (const src of CSV_SOURCES) {
+          try {
+            const resp = await fetch(src.url, { cache: 'no-cache' });
+            if (!resp.ok) continue;
+            const text = await resp.text();
+            if (text && text.includes('model_name') && text.includes('metric_value')) {
+              loadCSVText(text, src.label);
+              return;
+            }
+          } catch (_) {
+            // Try next fallback source
+          }
+        }
+        setStatus('error', 'No default results CSV found', '');
+        showBanner(
+          'warn',
+          'Could not fetch <code>../results/coordbench_results.csv</code> or the GitHub raw CSV. ' +
+            'Click <strong>Load local CSV</strong> above or drag &amp; drop any <code>coordbench_results.csv</code> onto this page to explore results.'
+        );
+      }
+
+      // --- Copy Markdown ---
+      function tableToMarkdown(tableEl) {
+        const ths = Array.from(tableEl.querySelectorAll('thead th')).map((th) => {
+          const clone = th.cloneNode(true);
+          clone.querySelectorAll('.sort-arrow').forEach((n) => n.remove());
+          return clone.textContent.replace(/\s+/g, ' ').trim();
+        });
+        const trs = Array.from(tableEl.querySelectorAll('tbody tr')).map((tr) =>
+          Array.from(tr.querySelectorAll('td')).map((td) => td.textContent.replace(/\s+/g, ' ').trim())
+        );
+        if (ths.length === 0 || trs.length === 0) return '';
+        const sep = ths.map((_, i) => (i < 3 ? '---' : '---:'));
+        const lines = [
+          `| ${ths.join(' | ')} |`,
+          `| ${sep.join(' | ')} |`,
+          ...trs.map((r) => `| ${r.join(' | ')} |`),
+        ];
+        return lines.join('\n');
+      }
+
+      // --- Wire up events ---
+      el.tabMacro.addEventListener('click', () => {
+        state.view = 'macro';
+        el.tabMacro.classList.add('active');
+        el.tabMacro.setAttribute('aria-selected', 'true');
+        el.tabDataset.classList.remove('active');
+        el.tabDataset.setAttribute('aria-selected', 'false');
+        renderCurrentView();
+      });
+
+      el.tabDataset.addEventListener('click', () => {
+        state.view = 'dataset';
+        el.tabDataset.classList.add('active');
+        el.tabDataset.setAttribute('aria-selected', 'true');
+        el.tabMacro.classList.remove('active');
+        el.tabMacro.setAttribute('aria-selected', 'false');
+        renderCurrentView();
+      });
+
+      el.searchInput.addEventListener('input', (ev) => {
+        state.search = ev.target.value.trim();
+        renderCurrentView();
+      });
+
+      el.datasetSelect.addEventListener('change', (ev) => {
+        state.selectedDataset = ev.target.value;
+        renderDatasetView();
+      });
+
+      el.macroTable.querySelectorAll('thead th[data-sort]').forEach((th) => {
+        th.addEventListener('click', () => {
+          const key = th.dataset.sort;
+          if (state.macroSort.col === key) {
+            state.macroSort.dir = state.macroSort.dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            state.macroSort.col = key;
+            state.macroSort.dir = ['rank', 'model_name', 'method'].includes(key) ? 'asc' : 'desc';
+          }
+          renderMacro();
+        });
+      });
+
+      el.fileInput.addEventListener('change', (ev) => {
+        const file = ev.target.files && ev.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => loadCSVText(String(reader.result || ''), file.name);
+        reader.readAsText(file);
+        ev.target.value = '';
+      });
+
+      // Drag & drop CSV
+      let dragDepth = 0;
+      window.addEventListener('dragenter', (ev) => {
+        ev.preventDefault();
+        dragDepth++;
+        document.body.classList.add('drag-over');
+      });
+      window.addEventListener('dragover', (ev) => ev.preventDefault());
+      window.addEventListener('dragleave', () => {
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) document.body.classList.remove('drag-over');
+      });
+      window.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        dragDepth = 0;
+        document.body.classList.remove('drag-over');
+        const file = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => loadCSVText(String(reader.result || ''), file.name);
+        reader.readAsText(file);
+      });
+
+      el.copyMdBtn.addEventListener('click', async () => {
+        const tbl = state.view === 'macro' ? el.macroTable : document.getElementById('dataset-table');
+        const md = tableToMarkdown(tbl);
+        if (!md) return;
+        try {
+          await navigator.clipboard.writeText(md);
+          const orig = el.copyMdBtn.textContent;
+          el.copyMdBtn.textContent = 'Copied!';
+          setTimeout(() => { el.copyMdBtn.textContent = orig; }, 1400);
+        } catch (_) {
+          // Clipboard unavailable
+        }
+      });
+
+      // Theme toggle
+      function initTheme() {
+        const saved = localStorage.getItem('coordbench-theme');
+        if (saved === 'light' || saved === 'dark') {
+          document.documentElement.setAttribute('data-theme', saved);
+        }
+      }
+      el.themeToggle.addEventListener('click', () => {
+        const cur = document.documentElement.getAttribute('data-theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const isDark = cur === 'dark' || (!cur && prefersDark);
+        const next = isDark ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('coordbench-theme', next);
+      });
+
+      initTheme();
+      autoLoadCSV();
+    })();
+  </script>
+</body>
+</html>
