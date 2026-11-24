@@ -11,7 +11,7 @@
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Silkscreen:wght@400;700&display=swap"
     rel="stylesheet"
   />
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort.webgpu.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.4/dist.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
   <style>
@@ -632,6 +632,10 @@
             <option value="sled-s1-s2-ls">sled-s1-s2-ls (54.2 MB)</option>
             <option value="sled-s2-ls">sled-s2-ls (54.2 MB)</option>
           </optgroup>
+          <optgroup label="Quantized INT4 (69.5 MB · MRL)">
+            <option value="mind-64">mind-64 (69.5 MB · INT4 64-d)</option>
+            <option value="mind-256">mind-256 (69.5 MB · INT4 256-d)</option>
+          </optgroup>
         </select>
       </div>
 
@@ -715,15 +719,44 @@
       initTheme();
 
       const HF_BASE = 'https://huggingface.co/taylor-geospatial/earthinr-zoo/resolve/main';
-      const ORT_WASM_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+      const ORT_WASM_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/';
       const WORLD_ATLAS_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json';
+
+      const MODELS = {
+        'mind-64': {
+          url: HF_BASE + '/mind/model_int4_bs32.onnx',
+          cacheKey: 'mind/model_int4_bs32.onnx',
+          sliceDim: 64,
+          chunkSize: { webgpu: 1024, wasm: 256 },
+        },
+        'mind-256': {
+          url: HF_BASE + '/mind/model_int4_bs32.onnx',
+          cacheKey: 'mind/model_int4_bs32.onnx',
+          sliceDim: 256,
+          chunkSize: { webgpu: 1024, wasm: 256 },
+        },
+      };
+
+      function getModelConfig(modelId) {
+        if (Object.prototype.hasOwnProperty.call(MODELS, modelId)) {
+          return MODELS[modelId];
+        }
+        const relPath = encodeURIComponent(modelId) + '/model.onnx';
+        return {
+          url: HF_BASE + '/' + relPath,
+          cacheKey: relPath,
+          sliceDim: null,
+          chunkSize: null,
+        };
+      }
 
       const LON_MIN = -180;
       const LON_MAX = 180;
       const LAT_MIN = -85;
       const LAT_MAX = 85;
       const KM_PER_DEG = 111.32;
-      const BATCH_SIZE = 4096;
+      const WEBGPU_BATCH_SIZE = 8192;
+      const WASM_BATCH_SIZE = 4096;
       const LOCAL_PCA_DEBOUNCE_MS = 250;
 
       function latToMercY(lat) {
@@ -814,7 +847,7 @@
       const hoverMetricVal = document.getElementById('hover-metric-val');
       const hoverEmb = document.getElementById('hover-emb');
 
-      const MAX_BUFFER_CACHE_BYTES = 64 * 1024 * 1024;
+      const MAX_BUFFER_CACHE_BYTES = 96 * 1024 * 1024;
       const bufferCache = new Map();
       let bufferCacheBytes = 0;
       let activeSessionKey = '';
@@ -908,17 +941,19 @@
       }
 
       async function fetchModelBuffer(modelId) {
-        if (bufferCache.has(modelId)) {
-          const cached = bufferCache.get(modelId);
-          bufferCache.delete(modelId);
-          bufferCache.set(modelId, cached);
+        const modelCfg = getModelConfig(modelId);
+        const cacheKey = modelCfg.cacheKey || modelCfg.url;
+        if (bufferCache.has(cacheKey)) {
+          const cached = bufferCache.get(cacheKey);
+          bufferCache.delete(cacheKey);
+          bufferCache.set(cacheKey, cached);
           return { buffer: cached, downloadMs: 0 };
         }
-        const url = HF_BASE + '/' + encodeURIComponent(modelId) + '/model.onnx';
+        const url = modelCfg.url;
         const t0 = performance.now();
         const resp = await fetch(url);
         if (!resp.ok) {
-          throw new Error('HTTP ' + resp.status + ' fetching ' + modelId + '/model.onnx');
+          throw new Error('HTTP ' + resp.status + ' fetching ' + cacheKey);
         }
         const buffer = await resp.arrayBuffer();
         const downloadMs = performance.now() - t0;
@@ -929,7 +964,7 @@
             bufferCache.delete(oldestKey);
             bufferCacheBytes -= oldestBuf.byteLength;
           }
-          bufferCache.set(modelId, buffer);
+          bufferCache.set(cacheKey, buffer);
           bufferCacheBytes += buffer.byteLength;
         }
         return { buffer, downloadMs };
@@ -956,7 +991,9 @@
       }
 
       async function getSession(modelId, forceWasm) {
-        const cacheKey = modelId + ':' + (forceWasm ? 'wasm' : 'auto');
+        const modelCfg = getModelConfig(modelId);
+        const assetKey = modelCfg.cacheKey || modelCfg.url;
+        const cacheKey = assetKey + ':' + (forceWasm ? 'wasm' : 'auto');
         if (activeSessionEntry && activeSessionKey === cacheKey) {
           return {
             session: activeSessionEntry.session,
@@ -997,10 +1034,19 @@
         return entry;
       }
 
-      async function runChunkedInference(session, coords, count, runId) {
+      function resolveChunkSize(modelCfg, provider) {
+        const defaultSize = provider === 'webgpu' ? WEBGPU_BATCH_SIZE : WASM_BATCH_SIZE;
+        if (!modelCfg || !modelCfg.chunkSize) return defaultSize;
+        if (typeof modelCfg.chunkSize === 'number') return modelCfg.chunkSize;
+        return modelCfg.chunkSize[provider] || defaultSize;
+      }
+
+      async function runChunkedInference(session, coords, count, runId, modelCfg, provider) {
         const inputName = session.inputNames[0];
         const outputName = session.outputNames[0];
-        const totalChunks = Math.ceil(count / BATCH_SIZE);
+        const chunkSize = resolveChunkSize(modelCfg, provider);
+        const totalChunks = Math.ceil(count / chunkSize);
+        const sliceDim = modelCfg && modelCfg.sliceDim ? modelCfg.sliceDim : 0;
 
         let embeddings = null;
         let embedDim = 0;
@@ -1008,8 +1054,8 @@
         for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
           if (runId !== state.runId) return null;
 
-          const start = chunkIdx * BATCH_SIZE;
-          const end = Math.min(start + BATCH_SIZE, count);
+          const start = chunkIdx * chunkSize;
+          const end = Math.min(start + chunkSize, count);
           const batchLen = end - start;
           const slice = coords.subarray(start * 2, end * 2);
 
@@ -1019,13 +1065,24 @@
           const results = await runPromise;
           const outTensor = results[outputName];
           const outData = outTensor.data;
+          const rawDim = outTensor.dims[outTensor.dims.length - 1];
+          const targetDim = sliceDim > 0 ? Math.min(sliceDim, rawDim) : rawDim;
 
           if (!embeddings) {
-            embedDim = outTensor.dims[outTensor.dims.length - 1];
+            embedDim = targetDim;
             embeddings = new Float32Array(count * embedDim);
           }
 
-          embeddings.set(outData, start * embedDim);
+          if (targetDim === rawDim) {
+            embeddings.set(outData, start * embedDim);
+          } else {
+            for (let r = 0; r < batchLen; r++) {
+              const srcOff = r * rawDim;
+              const dstOff = (start + r) * embedDim;
+              embeddings.set(outData.subarray(srcOff, srcOff + targetDim), dstOff);
+            }
+          }
+
           if (typeof outTensor.dispose === 'function') outTensor.dispose();
           if (typeof inputTensor.dispose === 'function') inputTensor.dispose();
 
@@ -1912,9 +1969,10 @@
         runBtn.disabled = true;
 
         try {
+          const modelCfg = getModelConfig(modelId);
           const { width, height, count, coords } = buildCoordGrid(gridKm);
           gridBadge.textContent = 'Grid: ' + width + ' × ' + height + ' (' + count.toLocaleString() + ')';
-          setStatus('Loading ' + modelId + '.onnx…');
+          setStatus('Loading ' + modelId + '…');
 
           let sessionEntry = await getSession(modelId, false);
           if (runId !== state.runId) return;
@@ -1924,7 +1982,14 @@
           let tInf0 = performance.now();
           let infResult = null;
           try {
-            infResult = await runChunkedInference(sessionEntry.session, coords, count, runId);
+            infResult = await runChunkedInference(
+              sessionEntry.session,
+              coords,
+              count,
+              runId,
+              modelCfg,
+              sessionEntry.provider
+            );
           } catch (runErr) {
             if (sessionEntry.provider === 'webgpu') {
               setStatus('WebGPU op unsupported, falling back to WASM…');
@@ -1932,7 +1997,14 @@
               if (runId !== state.runId) return;
               setBackendBadge(sessionEntry.provider);
               tInf0 = performance.now();
-              infResult = await runChunkedInference(sessionEntry.session, coords, count, runId);
+              infResult = await runChunkedInference(
+                sessionEntry.session,
+                coords,
+                count,
+                runId,
+                modelCfg,
+                sessionEntry.provider
+              );
             } else {
               throw runErr;
             }
