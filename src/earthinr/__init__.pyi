@@ -3,7 +3,7 @@
 
 """Type stubs for top-level EarthINR lazy exports."""
 
-from . import cli, coordbench, models, probes
+from . import analysis, cli, coordbench, models, probes
 from ._errors import (
     ConfigError,
     DatasetNotFoundError,
@@ -19,6 +19,7 @@ __all__: tuple[str, ...] = (
     'DependencyNotFoundError',
     'EarthINRError',
     '__version__',
+    'analysis',
     'cli',
     'coordbench',
     'models',
