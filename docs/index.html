@@ -914,6 +914,7 @@
               <th class="left" data-sort="model_name">Model <span class="sort-arrow"></span></th>
               <th class="left" data-sort="method">Method <span class="sort-arrow"></span></th>
               <th data-sort="feature_dim">Dim <span class="sort-arrow"></span></th>
+              <th data-sort="halfSillKm" title="Implicit spatial resolution (half-sill characteristic distance from empirical semivariogram)">Half-Sill <span class="sort-arrow"></span><span class="th-sub">km</span></th>
               <th data-sort="overallReg">Overall Reg R&sup2; <span class="sort-arrow"></span><span class="th-sub" id="th-reg-n"></span></th>
               <th data-sort="overallCls">Overall Cls Acc <span class="sort-arrow"></span><span class="th-sub" id="th-cls-n"></span></th>
               <th data-sort="envScore">Env R&sup2; <span class="sort-arrow"></span><span class="th-sub" id="th-env-n"></span></th>
@@ -960,6 +961,7 @@
       </div>
       <div>
         <a href="https://github.com/taylor-geospatial/earthinr" target="_blank" rel="noopener">taylor-geospatial/earthinr</a>
+        &middot; <a href="https://github.com/taylor-geospatial/earthinr/blob/main/docs/IMPLICIT_RESOLUTION.md" target="_blank" rel="noopener">Implicit Resolution</a>
         &middot; Drop any CoordBench CSV onto this page to inspect locally.
       </div>
     </footer>
@@ -1063,9 +1065,17 @@
         },
       ];
 
+      const RESOLUTION_CSV_SOURCES = [
+        { url: '../results/implicit_resolution.csv' },
+        {
+          url: 'https://raw.githubusercontent.com/taylor-geospatial/earthinr/main/results/implicit_resolution.csv',
+        },
+      ];
+
       // --- State ---
       const state = {
         rawRows: [],
+        resolutionByModel: new Map(),
         sourceLabel: '',
         view: 'macro', // 'macro' | 'dataset'
         splits: [], // [{ key, split, cellDeg, label }]
@@ -1383,10 +1393,13 @@
         const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
         const rows = [];
         for (const e of byEntry.values()) {
+          const res = state.resolutionByModel.get(e.model_name) || null;
           rows.push({
             model_name: e.model_name,
             method: e.method,
             feature_dim: e.feature_dim,
+            halfSillKm: res ? res.half_sill_km : null,
+            resolution: res,
             meanRank: mean(e.ranks),
             overallReg: mean(e.regScores),
             overallCls: mean(e.clsScores),
@@ -1451,6 +1464,29 @@
 
       function fmtDim(dim) {
         return dim && dim > 0 ? String(dim) : '\u2014';
+      }
+
+      function fmtHalfSill(val) {
+        if (val === null || val === undefined || !Number.isFinite(val)) return '\u2014';
+        if (val < 100) return `${val.toFixed(1)} km`;
+        return `${Math.round(val)} km`;
+      }
+
+      function halfSillTooltip(res) {
+        if (!res || !Number.isFinite(res.half_sill_km)) return '';
+        const hs = res.half_sill_km.toFixed(1);
+        const gKm = Number.isFinite(res.suggested_grid_km)
+          ? res.suggested_grid_km.toFixed(1)
+          : null;
+        const gDeg = Number.isFinite(res.suggested_grid_deg)
+          ? res.suggested_grid_deg < 0.1
+            ? res.suggested_grid_deg.toFixed(3)
+            : res.suggested_grid_deg.toFixed(2)
+          : null;
+        if (gKm !== null && gDeg !== null) {
+          return `Half-sill: ${hs} km | Suggested grid: ${gKm} km (${gDeg}\u00B0)`;
+        }
+        return `Half-sill: ${hs} km`;
       }
 
       function methodBadgeClass(method) {
@@ -1735,6 +1771,7 @@
             const dispRank = idx + 1;
             const rankCls = dispRank === 1 ? 'rank-1' : dispRank === 2 ? 'rank-2' : dispRank === 3 ? 'rank-3' : '';
             const partial = r.nDatasets < r.totalDatasets;
+            const hsTip = halfSillTooltip(r.resolution);
             return `<tr>
               <td class="left rank-cell ${rankCls}">
                 #${dispRank}
@@ -1743,6 +1780,7 @@
               <td class="left"><span class="model-name">${escapeHtml(r.model_name)}</span></td>
               <td class="left"><span class="method-badge ${methodBadgeClass(r.method)}">${escapeHtml(r.method)}</span></td>
               <td class="${r.feature_dim ? '' : 'muted'}">${fmtDim(r.feature_dim)}</td>
+              <td class="${r.halfSillKm !== null ? '' : 'muted'}"${hsTip ? ` title="${escapeHtml(hsTip)}"` : ''}>${fmtHalfSill(r.halfSillKm)}</td>
               <td class="${scoreHighlightClass(r.overallReg, topReg)}">${fmtScoreWithBar(r.overallReg)}</td>
               <td class="${scoreHighlightClass(r.overallCls, topCls)}">${fmtScoreWithBar(r.overallCls)}</td>
               <td class="${scoreHighlightClass(r.envScore, topEnv)}">${fmtScore(r.envScore)}</td>
@@ -2020,6 +2058,43 @@
         );
       }
 
+      function parseResolutionCSV(text) {
+        const parsed = parseCSV(text);
+        const map = new Map();
+        for (const r of parsed) {
+          if (!r.model_name) continue;
+          const hs = numOrNull(r.half_sill_km);
+          if (hs === null) continue;
+          map.set(r.model_name, {
+            half_sill_km: hs,
+            suggested_grid_km: numOrNull(r.suggested_grid_km),
+            suggested_grid_deg: numOrNull(r.suggested_grid_deg),
+            sill: numOrNull(r.sill),
+            embed_dim: numOrNull(r.embed_dim),
+          });
+        }
+        return map;
+      }
+
+      async function autoLoadResolution() {
+        for (const src of RESOLUTION_CSV_SOURCES) {
+          try {
+            const resp = await fetch(src.url, { cache: 'no-cache' });
+            if (!resp.ok) continue;
+            const text = await resp.text();
+            if (text && text.includes('model_name') && text.includes('half_sill_km')) {
+              state.resolutionByModel = parseResolutionCSV(text);
+              if (state.rawRows.length > 0 && state.view === 'macro') {
+                renderMacro();
+              }
+              return;
+            }
+          } catch (_) {
+            // Fail gracefully when implicit_resolution.csv is unavailable
+          }
+        }
+      }
+
       // --- Copy Markdown ---
       function tableToMarkdown(tableEl) {
         const ths = Array.from(tableEl.querySelectorAll('thead th')).map((th) => {
@@ -2080,7 +2155,7 @@
             state.macroSort.dir = state.macroSort.dir === 'asc' ? 'desc' : 'asc';
           } else {
             state.macroSort.col = key;
-            state.macroSort.dir = ['rank', 'model_name', 'method'].includes(key) ? 'asc' : 'desc';
+            state.macroSort.dir = ['rank', 'model_name', 'method', 'halfSillKm'].includes(key) ? 'asc' : 'desc';
           }
           renderMacro();
         });
@@ -2157,6 +2232,7 @@
       });
 
       initTheme();
+      autoLoadResolution();
       autoLoadCSV();
     })();
   </script>
