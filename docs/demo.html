@@ -111,6 +111,10 @@
       border-radius: 0;
     }
 
+    [hidden] {
+      display: none !important;
+    }
+
     html {
       margin: 0;
       padding: 0;
@@ -462,6 +466,11 @@
       margin: 0 8px;
     }
 
+    .readout-item {
+      display: inline-block;
+      white-space: nowrap;
+    }
+
     .error-overlay {
       position: absolute;
       top: 16px;
@@ -575,7 +584,7 @@
       </a>
       <span class="brand-divider">/</span>
       <h1 class="demo-title">LIVE EMBEDDING MAP</h1>
-      <p class="demo-subtitle">In-browser ONNX inference projected onto its first three principal components (RGB).</p>
+      <p class="demo-subtitle">In-browser ONNX inference — global/regional/local PCA, spatial gradients, and click similarity.</p>
     </div>
     <div class="topbar-right">
       <nav class="topbar-nav" aria-label="Primary">
@@ -617,6 +626,22 @@
         </select>
       </div>
 
+      <div class="field">
+        <label for="view-select">View</label>
+        <select id="view-select">
+          <option value="pca-1-3" selected>PCA 1–3 (Global)</option>
+          <option value="pca-4-6">PCA 4–6 (Regional)</option>
+          <option value="pca-7-9">PCA 7–9 (Fine)</option>
+          <option value="pca-local">PCA (Viewport Local)</option>
+          <option value="gradient">Gradient ‖∇e‖</option>
+          <option value="similarity">Click Similarity</option>
+        </select>
+      </div>
+
+      <button id="refit-btn" class="px-btn px-btn-sm" type="button" hidden title="Refit local PCA to current viewport">
+        Refit View
+      </button>
+
       <label class="checkbox-field">
         <input id="coastlines-toggle" type="checkbox" checked />
         Coastlines
@@ -637,9 +662,10 @@
     <div id="deck-container"></div>
     <div id="error-overlay" class="error-overlay" role="alert"></div>
     <div id="hover-readout" class="hover-readout">
-      <span class="label">COORD</span><span id="hover-coord">Move pointer over map</span>
+      <span class="readout-item"><span class="label">COORD</span><span id="hover-coord">Move pointer over map</span></span>
       <span class="sep">|</span>
-      <span class="label">e[0..2]</span><span id="hover-emb">--</span>
+      <span id="hover-metric-wrap" hidden><span class="readout-item"><span class="label" id="hover-metric-label">sim</span><span id="hover-metric-val">--</span></span><span class="sep">|</span></span>
+      <span class="readout-item"><span class="label">e[0..2]</span><span id="hover-emb">--</span></span>
     </div>
   </main>
 
@@ -679,6 +705,74 @@
       const LAT_MAX = 85;
       const KM_PER_DEG = 111.32;
       const BATCH_SIZE = 4096;
+      const LOCAL_PCA_DEBOUNCE_MS = 250;
+
+      function latToMercY(lat) {
+        const clamped = Math.max(LAT_MIN, Math.min(LAT_MAX, lat));
+        return Math.log(Math.tan(Math.PI / 4 + (clamped * Math.PI) / 360));
+      }
+
+      function mercYToLat(my) {
+        return (2 * Math.atan(Math.exp(my)) - Math.PI / 2) * (180 / Math.PI);
+      }
+
+      const MERC_Y_MIN = latToMercY(LAT_MIN);
+      const MERC_Y_MAX = latToMercY(LAT_MAX);
+
+      const INITIAL_VIEW_STATE = {
+        longitude: 0,
+        latitude: 15,
+        zoom: 1.35,
+        minZoom: 0.5,
+        maxZoom: 10,
+        pitch: 0,
+        bearing: 0,
+      };
+
+      const INFERNO_STOPS = [
+        [0.0, [0, 0, 4]],
+        [0.125, [31, 12, 72]],
+        [0.25, [85, 15, 109]],
+        [0.375, [136, 34, 106]],
+        [0.5, [186, 54, 85]],
+        [0.625, [227, 89, 51]],
+        [0.75, [249, 140, 10]],
+        [0.875, [249, 201, 50]],
+        [1.0, [252, 255, 164]],
+      ];
+
+      const VIRIDIS_STOPS = [
+        [0.0, [68, 1, 84]],
+        [0.125, [72, 36, 117]],
+        [0.25, [65, 68, 135]],
+        [0.375, [53, 95, 141]],
+        [0.5, [42, 120, 142]],
+        [0.625, [33, 145, 140]],
+        [0.75, [53, 183, 121]],
+        [0.875, [144, 215, 67]],
+        [1.0, [253, 231, 37]],
+      ];
+
+      function buildColormapLut(stops) {
+        const lut = new Uint8Array(256 * 3);
+        for (let i = 0; i < 256; i++) {
+          const t = i / 255;
+          let sIdx = 0;
+          while (sIdx < stops.length - 2 && t > stops[sIdx + 1][0]) {
+            sIdx++;
+          }
+          const [t0, c0] = stops[sIdx];
+          const [t1, c1] = stops[sIdx + 1];
+          const alpha = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
+          lut[i * 3] = Math.round(c0[0] + (c1[0] - c0[0]) * alpha);
+          lut[i * 3 + 1] = Math.round(c0[1] + (c1[1] - c0[1]) * alpha);
+          lut[i * 3 + 2] = Math.round(c0[2] + (c1[2] - c0[2]) * alpha);
+        }
+        return lut;
+      }
+
+      const INFERNO_LUT = buildColormapLut(INFERNO_STOPS);
+      const VIRIDIS_LUT = buildColormapLut(VIRIDIS_STOPS);
 
       if (typeof ort !== 'undefined' && ort.env && ort.env.wasm) {
         ort.env.wasm.wasmPaths = ORT_WASM_CDN;
@@ -686,6 +780,8 @@
 
       const modelSelect = document.getElementById('model-select');
       const gridSelect = document.getElementById('grid-select');
+      const viewSelect = document.getElementById('view-select');
+      const refitBtn = document.getElementById('refit-btn');
       const coastlinesToggle = document.getElementById('coastlines-toggle');
       const runBtn = document.getElementById('run-btn');
       const backendBadge = document.getElementById('backend-badge');
@@ -694,6 +790,9 @@
       const statusLine = document.getElementById('status-line');
       const errorOverlay = document.getElementById('error-overlay');
       const hoverCoord = document.getElementById('hover-coord');
+      const hoverMetricWrap = document.getElementById('hover-metric-wrap');
+      const hoverMetricLabel = document.getElementById('hover-metric-label');
+      const hoverMetricVal = document.getElementById('hover-metric-val');
       const hoverEmb = document.getElementById('hover-emb');
 
       const bufferCache = new Map();
@@ -705,9 +804,21 @@
         bitmapCanvas: null,
         bitmapVersion: 0,
         embeddings: null,
+        unitEmbeddings: null,
         embedDim: 0,
         gridW: 0,
         gridH: 0,
+        globalPca: null,
+        gradientValues: null,
+        similarityValues: null,
+        currentView: viewSelect ? viewSelect.value : 'pca-1-3',
+        simSeed: { lon: -0.1276, lat: 51.5072 }, // London default
+        viewState: Object.assign({}, INITIAL_VIEW_STATE),
+        refitTimer: null,
+        lastHoverCoord: null,
+        lastInferMs: 0,
+        lastDownloadMs: 0,
+        lastModelId: '',
         deckInstance: null,
       };
 
@@ -762,7 +873,8 @@
 
         let ptr = 0;
         for (let y = 0; y < height; y++) {
-          const lat = LAT_MAX - ((y + 0.5) / height) * (LAT_MAX - LAT_MIN);
+          const my = MERC_Y_MAX - ((y + 0.5) / height) * (MERC_Y_MAX - MERC_Y_MIN);
+          const lat = mercYToLat(my);
           for (let x = 0; x < width; x++) {
             const lon = LON_MIN + ((x + 0.5) / width) * (LON_MAX - LON_MIN);
             coords[ptr++] = lon;
@@ -862,50 +974,84 @@
         return { embeddings, embedDim };
       }
 
-      function computePcaRgbCanvas(embeddings, width, height, dim) {
-        const count = width * height;
-        const maxFitSamples = 8192;
-        const stride = Math.max(1, Math.floor(count / maxFitSamples));
-        const sampleCount = Math.ceil(count / stride);
+      function wrapLon(lon) {
+        return ((((lon + 180) % 360) + 360) % 360) - 180;
+      }
 
-        // Compute feature means on strided sample
-        const mean = new Float64Array(dim);
-        for (let i = 0; i < count; i += stride) {
-          const base = i * dim;
-          for (let d = 0; d < dim; d++) {
-            const val = embeddings[base + d];
-            if (Number.isFinite(val)) mean[d] += val;
+      function coordToPixel(lon, lat, width, height) {
+        const wLon = wrapLon(lon);
+        const my = latToMercY(lat);
+        const x = Math.min(
+          width - 1,
+          Math.max(0, Math.floor(((wLon - LON_MIN) / (LON_MAX - LON_MIN)) * width))
+        );
+        const y = Math.min(
+          height - 1,
+          Math.max(0, Math.floor(((MERC_Y_MAX - my) / (MERC_Y_MAX - MERC_Y_MIN)) * height))
+        );
+        return { x, y, pixelIdx: y * width + x };
+      }
+
+      function rgbaToCanvas(rgba, width, height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
+        return canvas;
+      }
+
+      function orthogonalizeAndNormalize(v, basis) {
+        // Two-pass Modified Gram-Schmidt to maintain orthogonality through PC 9
+        for (let pass = 0; pass < 2; pass++) {
+          for (let b = 0; b < basis.length; b++) {
+            const u = basis[b];
+            let dot = 0;
+            for (let d = 0; d < v.length; d++) dot += v[d] * u[d];
+            for (let d = 0; d < v.length; d++) v[d] -= dot * u[d];
           }
         }
-        for (let d = 0; d < dim; d++) mean[d] /= sampleCount;
-
-        // Materialize centered sample matrix for fast power iteration
-        const centered = new Float32Array(sampleCount * dim);
-        let sIdx = 0;
-        for (let i = 0; i < count; i += stride) {
-          const src = i * dim;
-          const dst = sIdx * dim;
-          for (let d = 0; d < dim; d++) {
-            const val = embeddings[src + d];
-            centered[dst + d] = Number.isFinite(val) ? val - mean[d] : 0;
-          }
-          sIdx++;
+        let normSq = 0;
+        for (let d = 0; d < v.length; d++) normSq += v[d] * v[d];
+        const norm = Math.sqrt(normSq);
+        if (norm > 1e-12) {
+          for (let d = 0; d < v.length; d++) v[d] /= norm;
+          return norm;
         }
+        v.fill(0);
+        return 0;
+      }
 
-        // Power iteration for top 3 principal components
-        const basis = [];
+      function extendPcaBasis(centered, sampleCount, dim, basis, targetCount) {
+        const maxComp = Math.min(targetCount, dim);
+        if (basis.length >= maxComp) return;
+
         const tmpProj = new Float64Array(sampleCount);
         const nextVec = new Float64Array(dim);
-        const nComp = Math.min(3, dim);
+        const prevVec = new Float64Array(dim);
 
-        for (let c = 0; c < nComp; c++) {
+        for (let c = basis.length; c < maxComp; c++) {
           const v = new Float64Array(dim);
           for (let d = 0; d < dim; d++) {
-            v[d] = Math.sin((d + 1) * (c + 1) * 1.6180339) + 0.5;
+            v[d] =
+              Math.sin((d + 1) * (c + 1) * 1.6180339 + c * 0.73) +
+              0.5 * Math.cos((d + 3) * (c + 2) * 0.6180339);
           }
-          orthogonalizeAndNormalize(v, basis);
+          let initNorm = orthogonalizeAndNormalize(v, basis);
+          if (initNorm <= 1e-12) {
+            for (let k = 0; k < dim && initNorm <= 1e-12; k++) {
+              v.fill(0);
+              v[k] = 1;
+              initNorm = orthogonalizeAndNormalize(v, basis);
+            }
+          }
+          if (initNorm <= 1e-12) {
+            basis.push(new Float32Array(dim));
+            continue;
+          }
 
-          for (let iter = 0; iter < 14; iter++) {
+          for (let iter = 0; iter < 18; iter++) {
+            prevVec.set(v);
             for (let s = 0; s < sampleCount; s++) {
               const row = s * dim;
               let dot = 0;
@@ -919,17 +1065,295 @@
               for (let d = 0; d < dim; d++) nextVec[d] += centered[row + d] * p;
             }
             for (let d = 0; d < dim; d++) v[d] = nextVec[d];
-            orthogonalizeAndNormalize(v, basis);
+            const norm = orthogonalizeAndNormalize(v, basis);
+            if (norm <= 1e-12) break;
+
+            let align = 0;
+            for (let d = 0; d < dim; d++) align += v[d] * prevVec[d];
+            if (Math.abs(align) > 1 - 1e-6) break;
           }
 
-          basis.push(Float32Array.from(v));
+          // Canonicalize component sign so colors stay consistent
+          let maxAbs = 0;
+          let maxSign = 1;
+          for (let d = 0; d < dim; d++) {
+            const a = Math.abs(v[d]);
+            if (a > maxAbs) {
+              maxAbs = a;
+              maxSign = v[d] >= 0 ? 1 : -1;
+            }
+          }
+          const out = new Float32Array(dim);
+          for (let d = 0; d < dim; d++) out[d] = v[d] * maxSign;
+          basis.push(out);
+        }
+      }
+
+      function ensureGlobalPca(neededComponents) {
+        const embeddings = state.embeddings;
+        const width = state.gridW;
+        const height = state.gridH;
+        const dim = state.embedDim;
+        const count = width * height;
+
+        if (!state.globalPca) {
+          const maxFitSamples = 8192;
+          const stride = Math.max(1, Math.floor(count / maxFitSamples));
+          const sampleCount = Math.ceil(count / stride);
+
+          const mean = new Float64Array(dim);
+          for (let i = 0; i < count; i += stride) {
+            const base = i * dim;
+            for (let d = 0; d < dim; d++) {
+              const val = embeddings[base + d];
+              if (Number.isFinite(val)) mean[d] += val;
+            }
+          }
+          for (let d = 0; d < dim; d++) mean[d] /= sampleCount;
+
+          const centered = new Float32Array(sampleCount * dim);
+          let sIdx = 0;
+          for (let i = 0; i < count; i += stride) {
+            const src = i * dim;
+            const dst = sIdx * dim;
+            for (let d = 0; d < dim; d++) {
+              const val = embeddings[src + d];
+              centered[dst + d] = Number.isFinite(val) ? val - mean[d] : 0;
+            }
+            sIdx++;
+          }
+
+          state.globalPca = {
+            mean,
+            centered,
+            sampleCount,
+            basis: [],
+            scores: [],
+          };
         }
 
+        const pca = state.globalPca;
+        extendPcaBasis(pca.centered, pca.sampleCount, dim, pca.basis, neededComponents);
+
+        const prevLen = pca.scores.length;
+        if (prevLen < neededComponents) {
+          const newCount = neededComponents - prevLen;
+          const newScores = [];
+          const activeIndices = [];
+          for (let j = 0; j < newCount; j++) {
+            const compIdx = prevLen + j;
+            const arr = new Float32Array(count);
+            newScores.push(arr);
+            if (compIdx < pca.basis.length) {
+              activeIndices.push(j);
+            }
+          }
+
+          if (activeIndices.length > 0) {
+            const mean = pca.mean;
+            const activeBasis = activeIndices.map((j) => pca.basis[prevLen + j]);
+            const activeScores = activeIndices.map((j) => newScores[j]);
+            const kLen = activeBasis.length;
+            const acc = new Float64Array(kLen);
+
+            for (let i = 0; i < count; i++) {
+              const base = i * dim;
+              acc.fill(0);
+              for (let d = 0; d < dim; d++) {
+                const raw = embeddings[base + d];
+                const x = Number.isFinite(raw) ? raw - mean[d] : 0;
+                for (let k = 0; k < kLen; k++) {
+                  acc[k] += x * activeBasis[k][d];
+                }
+              }
+              for (let k = 0; k < kLen; k++) {
+                activeScores[k][i] = acc[k];
+              }
+            }
+          }
+
+          for (let j = 0; j < newCount; j++) {
+            pca.scores.push(newScores[j]);
+          }
+        }
+
+        return pca;
+      }
+
+      function renderRgbScoresToCanvas(s0Arr, s1Arr, s2Arr, width, height, boundsIndices) {
+        const count = width * height;
+        const b0 = boundsIndices
+          ? percentileBoundsSubset(s0Arr, boundsIndices, 0.02, 0.98)
+          : percentileBounds(s0Arr, 0.02, 0.98);
+        const b1 = boundsIndices
+          ? percentileBoundsSubset(s1Arr, boundsIndices, 0.02, 0.98)
+          : percentileBounds(s1Arr, 0.02, 0.98);
+        const b2 = boundsIndices
+          ? percentileBoundsSubset(s2Arr, boundsIndices, 0.02, 0.98)
+          : percentileBounds(s2Arr, 0.02, 0.98);
+
+        const [lo0, hi0] = b0;
+        const [lo1, hi1] = b1;
+        const [lo2, hi2] = b2;
+        const sc0 = hi0 > lo0 ? 255 / (hi0 - lo0) : 0;
+        const sc1 = hi1 > lo1 ? 255 / (hi1 - lo1) : 0;
+        const sc2 = hi2 > lo2 ? 255 / (hi2 - lo2) : 0;
+
+        const rgba = new Uint8ClampedArray(count * 4);
+        for (let i = 0; i < count; i++) {
+          const px = i * 4;
+          rgba[px] = clampByte((s0Arr[i] - lo0) * sc0);
+          rgba[px + 1] = clampByte((s1Arr[i] - lo1) * sc1);
+          rgba[px + 2] = clampByte((s2Arr[i] - lo2) * sc2);
+          rgba[px + 3] = 255;
+        }
+        return rgbaToCanvas(rgba, width, height);
+      }
+
+      function renderGlobalPcaTriplet(startComp) {
+        const pca = ensureGlobalPca(startComp + 3);
+        const canvas = renderRgbScoresToCanvas(
+          pca.scores[startComp],
+          pca.scores[startComp + 1],
+          pca.scores[startComp + 2],
+          state.gridW,
+          state.gridH,
+          null
+        );
+        return { canvas };
+      }
+
+      function getCurrentViewportBounds() {
+        if (state.deckInstance && typeof state.deckInstance.getViewports === 'function') {
+          const vps = state.deckInstance.getViewports();
+          if (vps && vps.length > 0 && typeof vps[0].getBounds === 'function') {
+            const b = vps[0].getBounds();
+            if (b && b.length === 4 && b.every(Number.isFinite)) {
+              return b;
+            }
+          }
+        }
+        const container = document.getElementById('deck-container');
+        const w = (container && container.clientWidth) || 800;
+        const h = (container && container.clientHeight) || 500;
+        const vs = state.viewState || INITIAL_VIEW_STATE;
+        const scale = 512 * Math.pow(2, vs.zoom);
+        const halfLon = ((w / 2) / scale) * 360;
+        const clampedCenterLat = Math.max(-80, Math.min(80, vs.latitude));
+        const latRad = (clampedCenterLat * Math.PI) / 180;
+        const mercY = Math.log(Math.tan(Math.PI / 4 + latRad / 2));
+        const halfMerc = ((h / 2) / scale) * (2 * Math.PI);
+        const north = Math.min(
+          LAT_MAX,
+          (2 * Math.atan(Math.exp(mercY + halfMerc)) - Math.PI / 2) * (180 / Math.PI)
+        );
+        const south = Math.max(
+          LAT_MIN,
+          (2 * Math.atan(Math.exp(mercY - halfMerc)) - Math.PI / 2) * (180 / Math.PI)
+        );
+        return [vs.longitude - halfLon, south, vs.longitude + halfLon, north];
+      }
+
+      function getViewportPixelIndices(bounds, width, height) {
+        const [west, south, east, north] = bounds;
+        const sLat = Math.max(LAT_MIN, Math.min(LAT_MAX, south));
+        const nLat = Math.max(LAT_MIN, Math.min(LAT_MAX, north));
+        const nMercY = latToMercY(nLat);
+        const sMercY = latToMercY(sLat);
+
+        let yMin = Math.floor(((MERC_Y_MAX - nMercY) / (MERC_Y_MAX - MERC_Y_MIN)) * height);
+        let yMax = Math.ceil(((MERC_Y_MAX - sMercY) / (MERC_Y_MAX - MERC_Y_MIN)) * height) - 1;
+        yMin = Math.max(0, Math.min(height - 1, yMin));
+        yMax = Math.max(0, Math.min(height - 1, yMax));
+        if (yMin > yMax) {
+          const mid = yMin;
+          yMin = mid;
+          yMax = mid;
+        }
+
+        const xCols = [];
+        if (east - west >= 360 - 1e-6) {
+          for (let x = 0; x < width; x++) xCols.push(x);
+        } else {
+          const wLon = wrapLon(west);
+          const eLon = wrapLon(east);
+          for (let x = 0; x < width; x++) {
+            const lon = LON_MIN + ((x + 0.5) / width) * (LON_MAX - LON_MIN);
+            const inside = wLon <= eLon ? lon >= wLon && lon <= eLon : lon >= wLon || lon <= eLon;
+            if (inside) xCols.push(x);
+          }
+        }
+
+        const indices = [];
+        for (let y = yMin; y <= yMax; y++) {
+          const rowBase = y * width;
+          for (let k = 0; k < xCols.length; k++) {
+            indices.push(rowBase + xCols[k]);
+          }
+        }
+
+        // If deeply zoomed into a coarse grid, expand to a local neighborhood around center
+        if (indices.length < 16) {
+          const vs = state.viewState || INITIAL_VIEW_STATE;
+          const center = coordToPixel(vs.longitude, vs.latitude, width, height);
+          const rad = 3;
+          const fallback = [];
+          for (let dy = -rad; dy <= rad; dy++) {
+            const yy = Math.max(0, Math.min(height - 1, center.y + dy));
+            for (let dx = -rad; dx <= rad; dx++) {
+              const xx = (center.x + dx + width) % width;
+              fallback.push(yy * width + xx);
+            }
+          }
+          return Int32Array.from(fallback);
+        }
+
+        return Int32Array.from(indices);
+      }
+
+      function renderViewportLocalPca() {
+        const embeddings = state.embeddings;
+        const width = state.gridW;
+        const height = state.gridH;
+        const dim = state.embedDim;
+        const count = width * height;
+
+        const bounds = getCurrentViewportBounds();
+        const vpIndices = getViewportPixelIndices(bounds, width, height);
+        const vpCount = vpIndices.length;
+
+        const maxFitSamples = 8192;
+        const stride = Math.max(1, Math.floor(vpCount / maxFitSamples));
+        const sampleCount = Math.ceil(vpCount / stride);
+
+        const mean = new Float64Array(dim);
+        for (let i = 0; i < vpCount; i += stride) {
+          const base = vpIndices[i] * dim;
+          for (let d = 0; d < dim; d++) {
+            const val = embeddings[base + d];
+            if (Number.isFinite(val)) mean[d] += val;
+          }
+        }
+        for (let d = 0; d < dim; d++) mean[d] /= sampleCount;
+
+        const centered = new Float32Array(sampleCount * dim);
+        let sIdx = 0;
+        for (let i = 0; i < vpCount; i += stride) {
+          const src = vpIndices[i] * dim;
+          const dst = sIdx * dim;
+          for (let d = 0; d < dim; d++) {
+            const val = embeddings[src + d];
+            centered[dst + d] = Number.isFinite(val) ? val - mean[d] : 0;
+          }
+          sIdx++;
+        }
+
+        const basis = [];
+        extendPcaBasis(centered, sampleCount, dim, basis, 3);
         while (basis.length < 3) {
           basis.push(new Float32Array(dim));
         }
 
-        // Project all N points onto top 3 components
         const scores = [
           new Float32Array(count),
           new Float32Array(count),
@@ -956,46 +1380,134 @@
           scores[2][i] = p2;
         }
 
-        // 2-98 percentile stretch per channel
-        const bounds = scores.map((arr) => percentileBounds(arr, 0.02, 0.98));
-
-        const rgba = new Uint8ClampedArray(count * 4);
-        const [lo0, hi0] = bounds[0];
-        const [lo1, hi1] = bounds[1];
-        const [lo2, hi2] = bounds[2];
-        const s0 = hi0 > lo0 ? 255 / (hi0 - lo0) : 0;
-        const s1 = hi1 > lo1 ? 255 / (hi1 - lo1) : 0;
-        const s2 = hi2 > lo2 ? 255 / (hi2 - lo2) : 0;
-
-        for (let i = 0; i < count; i++) {
-          const px = i * 4;
-          rgba[px] = clampByte((scores[0][i] - lo0) * s0);
-          rgba[px + 1] = clampByte((scores[1][i] - lo1) * s1);
-          rgba[px + 2] = clampByte((scores[2][i] - lo2) * s2);
-          rgba[px + 3] = 255;
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
-        return canvas;
+        const canvas = renderRgbScoresToCanvas(
+          scores[0],
+          scores[1],
+          scores[2],
+          width,
+          height,
+          vpIndices
+        );
+        return { canvas, samplePixels: vpCount };
       }
 
-      function orthogonalizeAndNormalize(v, basis) {
-        for (let b = 0; b < basis.length; b++) {
-          const u = basis[b];
+      function ensureUnitEmbeddings() {
+        if (state.unitEmbeddings) return state.unitEmbeddings;
+        const embeddings = state.embeddings;
+        const dim = state.embedDim;
+        const count = state.gridW * state.gridH;
+        const unit = new Float32Array(count * dim);
+
+        for (let i = 0; i < count; i++) {
+          const base = i * dim;
+          let normSq = 0;
+          for (let d = 0; d < dim; d++) {
+            const v = embeddings[base + d];
+            if (Number.isFinite(v)) normSq += v * v;
+          }
+          const invNorm = normSq > 1e-24 ? 1 / Math.sqrt(normSq) : 0;
+          for (let d = 0; d < dim; d++) {
+            const v = embeddings[base + d];
+            unit[base + d] = Number.isFinite(v) ? v * invNorm : 0;
+          }
+        }
+        state.unitEmbeddings = unit;
+        return unit;
+      }
+
+      function ensureGradientValues() {
+        if (state.gradientValues) return state.gradientValues;
+        const unit = ensureUnitEmbeddings();
+        const width = state.gridW;
+        const height = state.gridH;
+        const dim = state.embedDim;
+        const grad = new Float32Array(width * height);
+
+        for (let y = 0; y < height; y++) {
+          const yPrev = y > 0 ? y - 1 : 0;
+          const yNext = y < height - 1 ? y + 1 : height - 1;
+          const ySpan = yNext - yPrev;
+          const dyScale = ySpan > 0 ? 1 / ySpan : 0;
+          const rowBase = y * width;
+          const rowPrev = yPrev * width;
+          const rowNext = yNext * width;
+
+          for (let x = 0; x < width; x++) {
+            const xPrev = x === 0 ? width - 1 : x - 1;
+            const xNext = x === width - 1 ? 0 : x + 1;
+
+            const bL = (rowBase + xPrev) * dim;
+            const bR = (rowBase + xNext) * dim;
+            const bU = (rowPrev + x) * dim;
+            const bD = (rowNext + x) * dim;
+
+            let dxSq = 0;
+            let dySq = 0;
+            for (let d = 0; d < dim; d++) {
+              const dx = unit[bR + d] - unit[bL + d];
+              dxSq += dx * dx;
+              const dy = unit[bD + d] - unit[bU + d];
+              dySq += dy * dy;
+            }
+            // Interior rows have dyScale = 0.5 -> sqrt(dxSq + dySq) / 2
+            grad[rowBase + x] = Math.sqrt(0.25 * dxSq + dyScale * dyScale * dySq);
+          }
+        }
+
+        state.gradientValues = grad;
+        return grad;
+      }
+
+      function renderScalarColormapCanvas(values, width, height, lut, lo, hi) {
+        const count = width * height;
+        const scale = hi > lo ? 255 / (hi - lo) : 0;
+        const rgba = new Uint8ClampedArray(count * 4);
+        for (let i = 0; i < count; i++) {
+          const cIdx = clampByte((values[i] - lo) * scale) * 3;
+          const px = i * 4;
+          rgba[px] = lut[cIdx];
+          rgba[px + 1] = lut[cIdx + 1];
+          rgba[px + 2] = lut[cIdx + 2];
+          rgba[px + 3] = 255;
+        }
+        return rgbaToCanvas(rgba, width, height);
+      }
+
+      function renderGradientView() {
+        const grad = ensureGradientValues();
+        const [lo, hi] = percentileBounds(grad, 0.02, 0.98);
+        const canvas = renderScalarColormapCanvas(grad, state.gridW, state.gridH, INFERNO_LUT, lo, hi);
+        return { canvas };
+      }
+
+      function renderSimilarityView() {
+        const unit = ensureUnitEmbeddings();
+        const width = state.gridW;
+        const height = state.gridH;
+        const dim = state.embedDim;
+        const count = width * height;
+
+        const seedPx = coordToPixel(state.simSeed.lon, state.simSeed.lat, width, height);
+        const refBase = seedPx.pixelIdx * dim;
+        const refVec = unit.subarray(refBase, refBase + dim);
+
+        const sim = new Float32Array(count);
+        let maxSim = -Infinity;
+        for (let i = 0; i < count; i++) {
+          const base = i * dim;
           let dot = 0;
-          for (let d = 0; d < v.length; d++) dot += v[d] * u[d];
-          for (let d = 0; d < v.length; d++) v[d] -= dot * u[d];
+          for (let d = 0; d < dim; d++) {
+            dot += unit[base + d] * refVec[d];
+          }
+          sim[i] = dot;
+          if (dot > maxSim) maxSim = dot;
         }
-        let normSq = 0;
-        for (let d = 0; d < v.length; d++) normSq += v[d] * v[d];
-        const norm = Math.sqrt(normSq);
-        if (norm > 1e-12) {
-          for (let d = 0; d < v.length; d++) v[d] /= norm;
-        }
+
+        state.similarityValues = sim;
+        const [p02] = percentileBounds(sim, 0.02, 0.98);
+        const hi = Math.max(maxSim, p02 + 1e-4);
+        const canvas = renderScalarColormapCanvas(sim, width, height, VIRIDIS_LUT, p02, hi);
+        return { canvas };
       }
 
       function percentileBounds(arr, pLow, pHigh) {
@@ -1012,10 +1524,158 @@
         return hi > lo ? [lo, hi] : [sample[0], sample[sample.length - 1] + 1e-6];
       }
 
+      function percentileBoundsSubset(arr, indices, pLow, pHigh) {
+        const len = indices.length;
+        if (len === 0) return [0, 1];
+        const step = Math.max(1, Math.floor(len / 16384));
+        const sample = [];
+        for (let i = 0; i < len; i += step) {
+          const v = arr[indices[i]];
+          if (Number.isFinite(v)) sample.push(v);
+        }
+        if (sample.length === 0) return [0, 1];
+        sample.sort((a, b) => a - b);
+        const lo = sample[Math.floor((sample.length - 1) * pLow)];
+        const hi = sample[Math.floor((sample.length - 1) * pHigh)];
+        return hi > lo ? [lo, hi] : [sample[0], sample[sample.length - 1] + 1e-6];
+      }
+
       function clampByte(v) {
         if (v <= 0) return 0;
         if (v >= 255) return 255;
         return Math.round(v);
+      }
+
+      function syncViewControls() {
+        if (refitBtn) {
+          refitBtn.hidden = state.currentView !== 'pca-local';
+        }
+        if (hoverMetricWrap && hoverMetricLabel) {
+          if (state.currentView === 'gradient') {
+            hoverMetricWrap.hidden = false;
+            hoverMetricLabel.textContent = '‖∇e‖';
+          } else if (state.currentView === 'similarity') {
+            hoverMetricWrap.hidden = false;
+            hoverMetricLabel.textContent = 'sim';
+          } else {
+            hoverMetricWrap.hidden = true;
+          }
+        }
+      }
+
+      function updateReadoutForCoord(lon, lat) {
+        if (lon === null || lat === null) {
+          hoverCoord.textContent =
+            state.currentView === 'similarity'
+              ? 'Click map to set ref (' +
+                state.simSeed.lon.toFixed(1) +
+                '°, ' +
+                state.simSeed.lat.toFixed(1) +
+                '°)'
+              : 'Move pointer over map';
+          hoverEmb.textContent = '--';
+          if (hoverMetricVal) hoverMetricVal.textContent = '--';
+          return;
+        }
+
+        const wLon = wrapLon(lon);
+        hoverCoord.textContent = wLon.toFixed(3) + '°, ' + lat.toFixed(3) + '°';
+
+        if (!state.embeddings || lat < LAT_MIN || lat > LAT_MAX) {
+          hoverEmb.textContent = '--';
+          if (hoverMetricVal) hoverMetricVal.textContent = '--';
+          return;
+        }
+
+        const { pixelIdx } = coordToPixel(wLon, lat, state.gridW, state.gridH);
+        if (state.currentView === 'gradient' && state.gradientValues && hoverMetricVal) {
+          hoverMetricVal.textContent = state.gradientValues[pixelIdx].toFixed(4);
+        } else if (state.currentView === 'similarity' && state.similarityValues && hoverMetricVal) {
+          hoverMetricVal.textContent =
+            state.similarityValues[pixelIdx].toFixed(4) +
+            ' (ref ' +
+            state.simSeed.lon.toFixed(1) +
+            '°, ' +
+            state.simSeed.lat.toFixed(1) +
+            '°)';
+        }
+
+        const idx = pixelIdx * state.embedDim;
+        const preview = [];
+        const k = Math.min(3, state.embedDim);
+        for (let d = 0; d < k; d++) {
+          preview.push(state.embeddings[idx + d].toFixed(3));
+        }
+        hoverEmb.textContent = '[' + preview.join(', ') + '] (D=' + state.embedDim + ')';
+      }
+
+      function applyCurrentView() {
+        syncViewControls();
+        if (!state.embeddings) return;
+
+        const t0 = performance.now();
+        let canvas = null;
+        let viewDesc = '';
+
+        if (state.currentView === 'pca-1-3') {
+          canvas = renderGlobalPcaTriplet(0).canvas;
+          viewDesc = 'Global PC 1–3';
+        } else if (state.currentView === 'pca-4-6') {
+          canvas = renderGlobalPcaTriplet(3).canvas;
+          viewDesc = state.embedDim < 4 ? 'PC 4–6 (D<' + 4 + ')' : 'Regional PC 4–6';
+        } else if (state.currentView === 'pca-7-9') {
+          canvas = renderGlobalPcaTriplet(6).canvas;
+          viewDesc = state.embedDim < 7 ? 'PC 7–9 (D<' + 7 + ')' : 'Fine PC 7–9';
+        } else if (state.currentView === 'pca-local') {
+          const res = renderViewportLocalPca();
+          canvas = res.canvas;
+          viewDesc = 'Local PCA (' + res.samplePixels.toLocaleString() + ' px)';
+        } else if (state.currentView === 'gradient') {
+          canvas = renderGradientView().canvas;
+          viewDesc = 'Gradient ‖∇e‖';
+        } else if (state.currentView === 'similarity') {
+          canvas = renderSimilarityView().canvas;
+          viewDesc =
+            'Similarity to ' +
+            state.simSeed.lon.toFixed(1) +
+            '°, ' +
+            state.simSeed.lat.toFixed(1) +
+            '°';
+        }
+
+        const viewMs = performance.now() - t0;
+        state.bitmapCanvas = canvas;
+        state.bitmapVersion++;
+        renderDeck();
+
+        const dlPart =
+          state.lastDownloadMs > 0 ? 'dl ' + Math.round(state.lastDownloadMs) + ' ms' : 'cached';
+        timingBadge.textContent =
+          dlPart +
+          ' · infer ' +
+          Math.round(state.lastInferMs) +
+          ' ms · view ' +
+          Math.round(viewMs) +
+          ' ms';
+        setStatus('Ready (' + state.lastModelId + ', D=' + state.embedDim + ' · ' + viewDesc + ')');
+
+        if (state.lastHoverCoord) {
+          updateReadoutForCoord(state.lastHoverCoord[0], state.lastHoverCoord[1]);
+        } else {
+          updateReadoutForCoord(null, null);
+        }
+      }
+
+      function scheduleLocalPcaRefit() {
+        if (state.refitTimer !== null) {
+          clearTimeout(state.refitTimer);
+        }
+        state.refitTimer = setTimeout(() => {
+          state.refitTimer = null;
+          if (state.currentView === 'pca-local' && state.embeddings) {
+            applyCurrentView();
+          }
+        }, LOCAL_PCA_DEBOUNCE_MS);
       }
 
       function buildDeckLayers() {
@@ -1045,6 +1705,25 @@
           );
         }
 
+        if (state.currentView === 'similarity' && state.embeddings) {
+          layers.push(
+            new deck.ScatterplotLayer({
+              id: 'similarity-seed-pin',
+              data: [{ position: [state.simSeed.lon, state.simSeed.lat] }],
+              getPosition: (d) => d.position,
+              radiusUnits: 'pixels',
+              getRadius: 7,
+              stroked: true,
+              filled: true,
+              lineWidthUnits: 'pixels',
+              getLineWidth: 2.5,
+              getFillColor: [255, 255, 255, 240],
+              getLineColor: [13, 17, 23, 255],
+              pickable: false,
+            })
+          );
+        }
+
         return layers;
       }
 
@@ -1055,55 +1734,47 @@
 
       function handleHover(info) {
         if (!info || !info.coordinate) {
-          hoverCoord.textContent = 'Move pointer over map';
-          hoverEmb.textContent = '--';
+          state.lastHoverCoord = null;
+          updateReadoutForCoord(null, null);
           return;
         }
-        let lon = info.coordinate[0];
+        const lon = wrapLon(info.coordinate[0]);
         const lat = info.coordinate[1];
-        // Wrap longitude into [-180, 180]
-        lon = ((((lon + 180) % 360) + 360) % 360) - 180;
+        state.lastHoverCoord = [lon, lat];
+        updateReadoutForCoord(lon, lat);
+      }
 
-        hoverCoord.textContent = lon.toFixed(3) + '°, ' + lat.toFixed(3) + '°';
+      function handleClick(info) {
+        if (state.currentView !== 'similarity' || !state.embeddings) return;
+        if (!info || !info.coordinate) return;
+        const lon = wrapLon(info.coordinate[0]);
+        const lat = Math.max(LAT_MIN, Math.min(LAT_MAX, info.coordinate[1]));
+        state.simSeed = { lon, lat };
+        state.lastHoverCoord = [lon, lat];
+        applyCurrentView();
+      }
 
-        if (!state.embeddings || lat < LAT_MIN || lat > LAT_MAX) {
-          hoverEmb.textContent = '--';
-          return;
+      function handleViewStateChange({ viewState }) {
+        state.viewState = viewState;
+        if (state.currentView === 'pca-local' && state.embeddings) {
+          scheduleLocalPcaRefit();
         }
-
-        const x = Math.min(
-          state.gridW - 1,
-          Math.max(0, Math.floor(((lon - LON_MIN) / (LON_MAX - LON_MIN)) * state.gridW))
-        );
-        const y = Math.min(
-          state.gridH - 1,
-          Math.max(0, Math.floor(((LAT_MAX - lat) / (LAT_MAX - LAT_MIN)) * state.gridH))
-        );
-        const idx = (y * state.gridW + x) * state.embedDim;
-        const preview = [];
-        const k = Math.min(3, state.embedDim);
-        for (let d = 0; d < k; d++) {
-          preview.push(state.embeddings[idx + d].toFixed(3));
-        }
-        hoverEmb.textContent = '[' + preview.join(', ') + '] (D=' + state.embedDim + ')';
       }
 
       function initDeck() {
         state.deckInstance = new deck.Deck({
           parent: document.getElementById('deck-container'),
           views: new deck.MapView({ repeat: true }),
-          initialViewState: {
-            longitude: 0,
-            latitude: 15,
-            zoom: 1.35,
-            minZoom: 0.5,
-            maxZoom: 10,
-            pitch: 0,
-            bearing: 0,
-          },
+          initialViewState: INITIAL_VIEW_STATE,
           controller: true,
           layers: [],
           onHover: handleHover,
+          onClick: handleClick,
+          onViewStateChange: handleViewStateChange,
+          getCursor: ({ isDragging }) => {
+            if (isDragging) return 'grabbing';
+            return state.currentView === 'similarity' ? 'crosshair' : 'grab';
+          },
         });
       }
 
@@ -1206,28 +1877,23 @@
           if (!infResult || runId !== state.runId) return;
           const inferMs = performance.now() - tInf0;
 
-          setStatus('Computing 3-component PCA…');
+          setStatus('Rendering view…');
           await yieldToBrowser();
           if (runId !== state.runId) return;
 
-          const tPca0 = performance.now();
-          const canvas = computePcaRgbCanvas(infResult.embeddings, width, height, infResult.embedDim);
-          const pcaMs = performance.now() - tPca0;
-
           state.embeddings = infResult.embeddings;
+          state.unitEmbeddings = null;
+          state.globalPca = null;
+          state.gradientValues = null;
+          state.similarityValues = null;
           state.embedDim = infResult.embedDim;
           state.gridW = width;
           state.gridH = height;
-          state.bitmapCanvas = canvas;
-          state.bitmapVersion++;
-          renderDeck();
+          state.lastInferMs = inferMs;
+          state.lastDownloadMs = sessionEntry.downloadMs;
+          state.lastModelId = modelId;
 
-          const dlPart = sessionEntry.downloadMs > 0
-            ? 'dl ' + Math.round(sessionEntry.downloadMs) + ' ms'
-            : 'cached';
-          timingBadge.textContent =
-            dlPart + ' · infer ' + Math.round(inferMs) + ' ms · pca ' + Math.round(pcaMs) + ' ms';
-          setStatus('Ready (' + modelId + ', D=' + infResult.embedDim + ')');
+          applyCurrentView();
         } catch (err) {
           if (runId !== state.runId) return;
           setBackendBadge('error');
@@ -1242,9 +1908,29 @@
 
       modelSelect.addEventListener('change', runPipeline);
       gridSelect.addEventListener('change', runPipeline);
+      viewSelect.addEventListener('change', () => {
+        if (state.refitTimer !== null) {
+          clearTimeout(state.refitTimer);
+          state.refitTimer = null;
+        }
+        state.currentView = viewSelect.value;
+        applyCurrentView();
+      });
+      if (refitBtn) {
+        refitBtn.addEventListener('click', () => {
+          if (state.refitTimer !== null) {
+            clearTimeout(state.refitTimer);
+            state.refitTimer = null;
+          }
+          if (state.currentView === 'pca-local' && state.embeddings) {
+            applyCurrentView();
+          }
+        });
+      }
       coastlinesToggle.addEventListener('change', renderDeck);
       runBtn.addEventListener('click', runPipeline);
 
+      syncViewControls();
       initDeck();
       loadCoastlines();
       runPipeline();
