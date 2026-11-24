@@ -4,135 +4,257 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Live WebGPU Demo — EarthINR</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect x='5' y='1' width='6' height='14' fill='%231d4ed8'/%3E%3Crect x='3' y='3' width='10' height='10' fill='%231d4ed8'/%3E%3Crect x='2' y='5' width='12' height='6' fill='%231d4ed8'/%3E%3Crect x='4' y='4' width='3' height='4' fill='%234ade80'/%3E%3Crect x='9' y='4' width='3' height='6' fill='%234ade80'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Silkscreen:wght@400;700&display=swap"
     rel="stylesheet"
   />
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.4/dist.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
   <style>
+    /* Default: Dark Digital CRT / Cartography Theme (matches docs/index.html) */
     :root {
-      --tg-brown: #3b1e1c;
-      --tg-ivory: #f4f4eb;
-      --tg-periwinkle: #80a0d8;
-      --tg-red: #ff4f2c;
-      --tg-light-blue: #a7d0dc;
-      --tg-green: #cff29e;
-      --tg-cream: #fdfdf5;
-      --tg-warm-gray: #f6f2ee;
-      --tg-mist: #ecf1f2;
-      --tg-charcoal: #303030;
-      --tg-hairline: rgba(59, 30, 28, 0.16);
-      --tg-muted: rgba(59, 30, 28, 0.62);
-      --tg-sans: "degular-text", "Degular", "Space Grotesk", "Open Sans", sans-serif;
-      --tg-mono: "gintronic", "Gintronic", "JetBrains Mono", "Inconsolata", ui-monospace, SFMono-Regular, Menlo, monospace;
-      --tg-radius: 10px;
-      --tg-radius-pill: 36px;
-      --tg-ease: 0.25s ease;
+      --bg: #0d1117;
+      --surface: #131922;
+      --surface-alt: #18202c;
+      --surface-hover: #1d2736;
+      --border: #273244;
+      --border-strong: #394963;
+      --shadow-color: #05080d;
+      --shadow-btn: 3px 3px 0 var(--shadow-color);
+      --shadow-btn-active: 1px 1px 0 var(--shadow-color);
+
+      --text: #e6edf3;
+      --text-muted: #8b9bb4;
+      --text-faint: #5f708a;
+
+      --mint: #4ade80;
+      --cyan: #38bdf8;
+      --amber: #facc15;
+      --violet: #a78bfa;
+      --danger: #f87171;
+
+      --map-bg: #080c12;
+      --readout-bg: rgba(13, 17, 23, 0.92);
+      --readout-text: #e6edf3;
+      --readout-border: #38bdf8;
+
+      --btn-primary-bg: var(--mint);
+      --btn-primary-fg: #08120c;
+      --btn-primary-bd: #22c55e;
+
+      --badge-webgpu-bg: rgba(74, 222, 128, 0.16);
+      --badge-webgpu-bd: var(--mint);
+      --badge-webgpu-fg: var(--mint);
+
+      --badge-wasm-bg: rgba(56, 189, 248, 0.14);
+      --badge-wasm-bd: var(--cyan);
+      --badge-wasm-fg: var(--cyan);
+
+      --badge-err-bg: rgba(248, 113, 113, 0.16);
+      --badge-err-bd: var(--danger);
+      --badge-err-fg: #fecaca;
+
+      --font-pixel: "Silkscreen", ui-monospace, monospace;
+      --font-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
-    *, *::before, *::after { box-sizing: border-box; }
+    /* Light Mode: Retro-LCD / Drafting Paper */
+    :root[data-theme="light"] {
+      --bg: #f2f4ef;
+      --surface: #fafbf8;
+      --surface-alt: #e8ece3;
+      --surface-hover: #edf1e8;
+      --border: #2d3a4b;
+      --border-strong: #1c2430;
+      --shadow-color: rgba(28, 36, 48, 0.28);
+      --shadow-btn: 3px 3px 0 var(--shadow-color);
+      --shadow-btn-active: 1px 1px 0 var(--shadow-color);
 
-    html, body {
-      height: 100%;
+      --text: #1c2430;
+      --text-muted: #4a596c;
+      --text-faint: #6f7f93;
+
+      --mint: #15803d;
+      --cyan: #0369a1;
+      --amber: #b45309;
+      --violet: #6d28d9;
+      --danger: #b91c1c;
+
+      --map-bg: #121a24;
+      --readout-bg: rgba(250, 251, 248, 0.94);
+      --readout-text: #1c2430;
+      --readout-border: #2d3a4b;
+
+      --btn-primary-bg: #1c2430;
+      --btn-primary-fg: #fafbf8;
+      --btn-primary-bd: #1c2430;
+
+      --badge-webgpu-bg: rgba(21, 128, 61, 0.14);
+      --badge-webgpu-bd: #15803d;
+      --badge-webgpu-fg: #14532d;
+
+      --badge-wasm-bg: rgba(3, 105, 161, 0.12);
+      --badge-wasm-bd: #0369a1;
+      --badge-wasm-fg: #0c4a6e;
+
+      --badge-err-bg: #fee2e2;
+      --badge-err-bd: #b91c1c;
+      --badge-err-fg: #7f1d1d;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      border-radius: 0;
+    }
+
+    html {
       margin: 0;
-      background: var(--tg-cream);
-      color: var(--tg-brown);
-      font-family: var(--tg-sans);
-      font-size: 14px;
-      line-height: 1.45;
-      -webkit-font-smoothing: antialiased;
+      padding: 0;
+      min-height: 100%;
     }
 
     body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    @media (min-width: 721px) {
+      body {
+        height: 100dvh;
+        overflow: hidden;
+      }
     }
 
     a {
       color: inherit;
       text-decoration: none;
-      transition: color var(--tg-ease);
     }
-    a:hover { color: var(--tg-red); }
 
-    /* Top header + nav */
-    .tg-topbar {
+    /* Top header + nav (matches docs/index.html) */
+    .topbar {
+      flex-shrink: 0;
+      position: relative;
+      z-index: 30;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 12px 24px;
-      padding: 14px 24px;
-      background: var(--tg-cream);
-      border-bottom: 1px solid var(--tg-hairline);
+      gap: 10px 20px;
+      padding: 12px 24px;
+      background: var(--surface);
+      border-bottom: 2px solid var(--border);
     }
 
-    .tg-brand-block {
+    .topbar-left {
       display: flex;
       flex-wrap: wrap;
-      align-items: baseline;
+      align-items: center;
       gap: 8px 14px;
     }
 
-    .tg-eyebrow {
-      font-family: var(--tg-mono);
-      font-size: 12px;
-      font-weight: 500;
+    .topbar-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .pixel-globe {
+      display: block;
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      image-rendering: pixelated;
+    }
+
+    .brand-wordmark {
+      font-family: var(--font-pixel);
+      font-size: 14px;
+      font-weight: 700;
       letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--tg-red);
+      color: var(--text);
     }
 
-    .tg-title {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      color: var(--tg-brown);
+    .brand-divider {
+      color: var(--text-faint);
+      user-select: none;
     }
 
-    .tg-subtitle {
+    .demo-title {
       margin: 0;
+      font-family: var(--font-pixel);
       font-size: 13px;
-      color: var(--tg-muted);
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      color: var(--cyan);
     }
 
-    .tg-nav {
+    .demo-subtitle {
+      margin: 0;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .topbar-right {
       display: flex;
       align-items: center;
-      gap: 22px;
+      gap: 16px;
     }
 
-    .tg-nav a {
-      font-family: var(--tg-mono);
-      font-size: 12.5px;
-      font-weight: 500;
+    .topbar-nav {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .topbar-nav a {
+      font-family: var(--font-pixel);
+      font-size: 11px;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      padding-bottom: 3px;
+      color: var(--text-muted);
+      padding: 4px 2px;
       border-bottom: 2px solid transparent;
+      transition: color 0.12s ease, border-color 0.12s ease;
     }
 
-    .tg-nav a.active {
-      color: var(--tg-red);
-      border-bottom-color: var(--tg-red);
+    .topbar-nav a:hover {
+      color: var(--text);
     }
 
-    /* Controls bar */
+    .topbar-nav a.active {
+      color: var(--cyan);
+      border-bottom-color: var(--cyan);
+    }
+
+    /* Controls bar (pinned above map stage so it never shrinks or gets occluded) */
     .controls-bar {
+      flex-shrink: 0;
+      position: relative;
+      z-index: 30;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
       gap: 10px 18px;
       padding: 10px 24px;
-      background: var(--tg-ivory);
-      border-bottom: 1px solid var(--tg-hairline);
+      background: var(--surface-alt);
+      border-bottom: 2px solid var(--border);
     }
 
     .controls-group {
@@ -146,63 +268,97 @@
       display: inline-flex;
       align-items: center;
       gap: 7px;
+      min-width: 0;
     }
 
     .field label {
-      font-family: var(--tg-mono);
-      font-size: 11.5px;
+      font-family: var(--font-pixel);
+      font-size: 10px;
       letter-spacing: 0.05em;
       text-transform: uppercase;
-      color: var(--tg-muted);
+      color: var(--text-muted);
+      flex-shrink: 0;
     }
 
     .field select {
-      font-family: var(--tg-mono);
-      font-size: 12.5px;
-      color: var(--tg-brown);
-      background: var(--tg-cream);
-      border: 1px solid var(--tg-light-blue);
-      border-radius: 6px;
-      padding: 5px 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text);
+      background: var(--surface);
+      border: 2px solid var(--border-strong);
+      padding: 5px 9px;
       outline: none;
       cursor: pointer;
+      min-width: 0;
+      max-width: 100%;
     }
     .field select:focus {
-      border-color: var(--tg-periwinkle);
+      border-color: var(--cyan);
     }
 
     .checkbox-field {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-family: var(--tg-mono);
+      font-family: var(--font-mono);
       font-size: 11.5px;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: var(--tg-brown);
+      color: var(--text);
       cursor: pointer;
       user-select: none;
     }
 
-    .tg-btn {
-      font-family: var(--tg-mono);
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--tg-brown);
-      background: transparent;
-      border: 2px solid var(--tg-periwinkle);
-      border-radius: var(--tg-radius-pill);
-      padding: 5px 14px;
+    .checkbox-field input[type="checkbox"] {
+      accent-color: var(--cyan);
+      width: 14px;
+      height: 14px;
       cursor: pointer;
-      transition: background var(--tg-ease), border-color var(--tg-ease);
     }
-    .tg-btn:hover:not(:disabled) {
-      background: var(--tg-light-blue);
-      border-color: var(--tg-light-blue);
+
+    .px-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--surface);
+      border: 2px solid var(--border-strong);
+      padding: 5px 12px;
+      cursor: pointer;
+      box-shadow: var(--shadow-btn);
+      transition: background 0.1s ease, border-color 0.1s ease, color 0.1s ease, transform 0.08s ease, box-shadow 0.08s ease;
+      user-select: none;
     }
-    .tg-btn:disabled {
+    .px-btn:hover:not(:disabled) {
+      background: var(--surface-hover);
+      border-color: var(--cyan);
+    }
+    .px-btn:active:not(:disabled) {
+      transform: translate(2px, 2px);
+      box-shadow: var(--shadow-btn-active);
+    }
+    .px-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    .px-btn-primary {
+      background: var(--btn-primary-bg);
+      border-color: var(--btn-primary-bd);
+      color: var(--btn-primary-fg);
+    }
+    .px-btn-primary:hover:not(:disabled) {
+      background: var(--cyan);
+      border-color: var(--cyan);
+      color: #06131c;
+    }
+
+    .px-btn-sm {
+      padding: 4px 10px;
+      font-size: 11px;
     }
 
     /* Telemetry / status strip */
@@ -211,56 +367,62 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
-      font-family: var(--tg-mono);
-      font-size: 12px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
       font-variant-numeric: tabular-nums;
+      min-width: 0;
     }
 
     .badge {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 9px;
-      border-radius: var(--tg-radius-pill);
-      border: 1px solid var(--tg-hairline);
-      background: var(--tg-cream);
-      color: var(--tg-brown);
-      font-size: 11.5px;
+      gap: 5px;
+      padding: 2px 8px;
+      border: 2px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 11px;
       font-weight: 500;
     }
 
     .badge-webgpu {
-      background: var(--tg-green);
-      border-color: var(--tg-brown);
-      color: var(--tg-brown);
-      font-weight: 600;
+      font-family: var(--font-pixel);
+      font-size: 10px;
+      background: var(--badge-webgpu-bg);
+      border-color: var(--badge-webgpu-bd);
+      color: var(--badge-webgpu-fg);
     }
 
     .badge-wasm {
-      background: var(--tg-mist);
-      border-color: var(--tg-periwinkle);
-      color: var(--tg-brown);
-      font-weight: 600;
+      font-family: var(--font-pixel);
+      font-size: 10px;
+      background: var(--badge-wasm-bg);
+      border-color: var(--badge-wasm-bd);
+      color: var(--badge-wasm-fg);
     }
 
     .badge-error {
-      background: var(--tg-red);
-      border-color: var(--tg-red);
-      color: var(--tg-cream);
-      font-weight: 600;
+      font-family: var(--font-pixel);
+      font-size: 10px;
+      background: var(--badge-err-bg);
+      border-color: var(--badge-err-bd);
+      color: var(--badge-err-fg);
     }
 
     .status-line {
-      color: var(--tg-muted);
-      font-size: 12px;
+      color: var(--text-muted);
+      font-size: 11.5px;
     }
 
-    /* Map container */
+    /* Map container (isolated stacking context below topbar/controls) */
     .map-stage {
       position: relative;
+      z-index: 1;
+      isolation: isolate;
       flex: 1 1 auto;
-      min-height: 460px;
-      background: var(--tg-brown);
+      min-height: 420px;
+      width: 100%;
+      background: var(--map-bg);
       overflow: hidden;
     }
 
@@ -276,25 +438,27 @@
       left: 16px;
       bottom: 16px;
       z-index: 10;
-      padding: 8px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--tg-light-blue);
-      background: rgba(59, 30, 28, 0.92);
-      color: var(--tg-ivory);
-      font-family: var(--tg-mono);
-      font-size: 12px;
+      padding: 7px 12px;
+      border: 2px solid var(--readout-border);
+      background: var(--readout-bg);
+      color: var(--readout-text);
+      box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
       font-variant-numeric: tabular-nums;
       pointer-events: none;
       max-width: calc(100% - 32px);
     }
 
     .hover-readout .label {
-      color: var(--tg-light-blue);
+      font-family: var(--font-pixel);
+      font-size: 9.5px;
+      color: var(--cyan);
       margin-right: 6px;
     }
 
     .hover-readout .sep {
-      color: rgba(244, 244, 235, 0.35);
+      color: var(--text-faint);
       margin: 0 8px;
     }
 
@@ -305,34 +469,123 @@
       transform: translateX(-50%);
       z-index: 20;
       max-width: 560px;
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: 1px solid var(--tg-red);
-      background: var(--tg-cream);
-      color: var(--tg-brown);
-      font-size: 13px;
+      width: calc(100% - 32px);
+      padding: 11px 14px;
+      border: 2px solid var(--danger);
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 3px 3px 0 var(--shadow-color);
+      font-size: 12.5px;
       display: none;
     }
     .error-overlay.show { display: block; }
-    .error-overlay strong { color: var(--tg-red); }
+    .error-overlay strong { color: var(--danger); }
 
     @media (max-width: 720px) {
-      .tg-topbar, .controls-bar { padding: 12px 14px; }
-      .tg-subtitle { display: none; }
+      .topbar {
+        padding: 10px 12px;
+        gap: 8px 12px;
+      }
+      .demo-subtitle,
+      .brand-divider,
+      .demo-title {
+        display: none;
+      }
+      .topbar-right {
+        gap: 10px;
+      }
+      .topbar-nav {
+        gap: 12px;
+      }
+      .controls-bar {
+        padding: 10px 12px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+      .controls-group {
+        width: 100%;
+        gap: 8px 10px;
+      }
+      .field {
+        flex: 1 1 auto;
+      }
+      .field select {
+        flex: 1 1 auto;
+        width: 100%;
+      }
+      .telemetry {
+        width: 100%;
+        gap: 6px;
+        overflow-wrap: anywhere;
+      }
+      .map-stage {
+        flex: 1 0 380px;
+        min-height: 380px;
+      }
+      .hover-readout {
+        left: 10px;
+        bottom: 10px;
+        max-width: calc(100% - 20px);
+        font-size: 11px;
+      }
     }
   </style>
 </head>
 <body>
-  <header class="tg-topbar">
-    <div class="tg-brand-block">
-      <span class="tg-eyebrow">Taylor Geospatial &middot; EarthINR</span>
-      <h1 class="tg-title">Live Embedding Map</h1>
-      <p class="tg-subtitle">In-browser ONNX inference projected onto its first three principal components (RGB).</p>
+  <header class="topbar">
+    <div class="topbar-left">
+      <a class="topbar-brand" href="index.html">
+        <svg class="pixel-globe" viewBox="0 0 16 16" width="24" height="24" shape-rendering="crispEdges" aria-hidden="true">
+          <!-- Pixel-art Earth globe (16x16) -->
+          <rect x="5" y="1" width="6" height="1" fill="#38bdf8"/>
+          <rect x="3" y="2" width="2" height="1" fill="#38bdf8"/>
+          <rect x="11" y="2" width="2" height="1" fill="#38bdf8"/>
+          <rect x="2" y="3" width="1" height="2" fill="#38bdf8"/>
+          <rect x="13" y="3" width="1" height="2" fill="#38bdf8"/>
+          <rect x="1" y="5" width="1" height="6" fill="#38bdf8"/>
+          <rect x="14" y="5" width="1" height="6" fill="#38bdf8"/>
+          <rect x="2" y="11" width="1" height="2" fill="#38bdf8"/>
+          <rect x="13" y="11" width="1" height="2" fill="#38bdf8"/>
+          <rect x="3" y="13" width="2" height="1" fill="#38bdf8"/>
+          <rect x="11" y="13" width="2" height="1" fill="#38bdf8"/>
+          <rect x="5" y="14" width="6" height="1" fill="#38bdf8"/>
+          <!-- Ocean fill -->
+          <rect x="5" y="2" width="6" height="12" fill="#1d4ed8"/>
+          <rect x="3" y="3" width="10" height="10" fill="#1d4ed8"/>
+          <rect x="2" y="5" width="12" height="6" fill="#1d4ed8"/>
+          <!-- Subtle highlight -->
+          <rect x="4" y="3" width="2" height="1" fill="#60a5fa"/>
+          <rect x="3" y="4" width="1" height="2" fill="#60a5fa"/>
+          <!-- Polar caps -->
+          <rect x="6" y="2" width="4" height="1" fill="#e6edf3"/>
+          <rect x="6" y="13" width="4" height="1" fill="#e6edf3"/>
+          <!-- Americas (left) -->
+          <rect x="4" y="4" width="3" height="2" fill="#4ade80"/>
+          <rect x="3" y="6" width="3" height="2" fill="#4ade80"/>
+          <rect x="5" y="8" width="2" height="2" fill="#22c55e"/>
+          <rect x="5" y="10" width="2" height="2" fill="#22c55e"/>
+          <!-- Europe / Africa (right) -->
+          <rect x="9" y="4" width="3" height="2" fill="#4ade80"/>
+          <rect x="8" y="6" width="4" height="2" fill="#4ade80"/>
+          <rect x="9" y="8" width="3" height="3" fill="#22c55e"/>
+          <rect x="10" y="11" width="2" height="1" fill="#22c55e"/>
+        </svg>
+        <span class="brand-wordmark">EARTHINR</span>
+      </a>
+      <span class="brand-divider">/</span>
+      <h1 class="demo-title">LIVE EMBEDDING MAP</h1>
+      <p class="demo-subtitle">In-browser ONNX inference projected onto its first three principal components (RGB).</p>
     </div>
-    <nav class="tg-nav" aria-label="Primary">
-      <a href="index.html">Leaderboard</a>
-      <a href="demo.html" class="active" aria-current="page">Live WebGPU Demo</a>
-    </nav>
+    <div class="topbar-right">
+      <nav class="topbar-nav" aria-label="Primary">
+        <a href="index.html">Leaderboard</a>
+        <a href="demo.html" class="active" aria-current="page">WebGPU Demo</a>
+      </nav>
+      <button id="theme-toggle" class="px-btn px-btn-sm" type="button" title="Toggle dark CRT / light LCD mode">
+        LCD Light
+      </button>
+    </div>
   </header>
 
   <section class="controls-bar" aria-label="Model and grid controls">
@@ -369,7 +622,7 @@
         Coastlines
       </label>
 
-      <button id="run-btn" class="tg-btn" type="button">Run</button>
+      <button id="run-btn" class="px-btn px-btn-primary" type="button">Run</button>
     </div>
 
     <div class="telemetry">
@@ -393,6 +646,28 @@
   <script>
     (() => {
       'use strict';
+
+      // Shared theme toggle (default: dark CRT; persisted under coordbench-theme)
+      const themeToggle = document.getElementById('theme-toggle');
+      function syncThemeButton() {
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        if (themeToggle) themeToggle.textContent = isLight ? 'CRT Dark' : 'LCD Light';
+      }
+      function initTheme() {
+        const saved = localStorage.getItem('coordbench-theme');
+        document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+        syncThemeButton();
+      }
+      if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+          const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+          const next = isLight ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', next);
+          localStorage.setItem('coordbench-theme', next);
+          syncThemeButton();
+        });
+      }
+      initTheme();
 
       const HF_BASE = 'https://huggingface.co/taylor-geospatial/earthinr-zoo/resolve/main';
       const ORT_WASM_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
@@ -461,13 +736,13 @@
       function setBackendBadge(provider) {
         backendBadge.className = 'badge';
         if (provider === 'webgpu') {
-          backendBadge.textContent = 'WebGPU';
+          backendBadge.textContent = 'WEBGPU';
           backendBadge.classList.add('badge-webgpu');
         } else if (provider === 'wasm') {
           backendBadge.textContent = 'WASM';
           backendBadge.classList.add('badge-wasm');
         } else if (provider === 'error') {
-          backendBadge.textContent = 'Failed';
+          backendBadge.textContent = 'FAILED';
           backendBadge.classList.add('badge-error');
         } else {
           backendBadge.textContent = 'Backend: --';
@@ -763,7 +1038,7 @@
               data: state.landGeoJson,
               filled: false,
               stroked: true,
-              getLineColor: [244, 244, 235, 195],
+              getLineColor: [230, 237, 243, 195],
               lineWidthMinPixels: 1.1,
               pickable: false,
             })
@@ -815,7 +1090,7 @@
 
       function initDeck() {
         state.deckInstance = new deck.Deck({
-          container: 'deck-container',
+          parent: document.getElementById('deck-container'),
           views: new deck.MapView({ repeat: true }),
           initialViewState: {
             longitude: 0,
@@ -832,13 +1107,60 @@
         });
       }
 
+      function splitAntimeridianLines(geojson) {
+        const lines = [];
+        function processRing(ring) {
+          if (!Array.isArray(ring) || ring.length < 2) return;
+          let seg = [ring[0]];
+          for (let i = 1; i < ring.length; i++) {
+            const prev = ring[i - 1];
+            const curr = ring[i];
+            if (Math.abs(curr[0] - prev[0]) > 180) {
+              if (seg.length >= 2) lines.push(seg);
+              seg = [curr];
+            } else {
+              seg.push(curr);
+            }
+          }
+          if (seg.length >= 2) lines.push(seg);
+        }
+        function walkGeom(geom) {
+          if (!geom) return;
+          if (geom.type === 'Polygon') {
+            for (const ring of geom.coordinates) processRing(ring);
+          } else if (geom.type === 'MultiPolygon') {
+            for (const poly of geom.coordinates) {
+              for (const ring of poly) processRing(ring);
+            }
+          } else if (geom.type === 'LineString') {
+            processRing(geom.coordinates);
+          } else if (geom.type === 'MultiLineString') {
+            for (const line of geom.coordinates) processRing(line);
+          } else if (geom.type === 'GeometryCollection') {
+            for (const g of geom.geometries) walkGeom(g);
+          }
+        }
+        if (geojson.type === 'FeatureCollection') {
+          for (const f of geojson.features) walkGeom(f.geometry);
+        } else if (geojson.type === 'Feature') {
+          walkGeom(geojson.geometry);
+        } else {
+          walkGeom(geojson);
+        }
+        return {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'MultiLineString', coordinates: lines },
+        };
+      }
+
       async function loadCoastlines() {
         try {
           const resp = await fetch(WORLD_ATLAS_URL);
           if (!resp.ok) return;
           const topo = await resp.json();
           if (typeof topojson !== 'undefined' && topo.objects && topo.objects.land) {
-            state.landGeoJson = topojson.feature(topo, topo.objects.land);
+            state.landGeoJson = splitAntimeridianLines(topojson.feature(topo, topo.objects.land));
             renderDeck();
           }
         } catch (_err) {
