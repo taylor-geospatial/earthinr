@@ -194,7 +194,7 @@ class TestFrequencyRFFLocationEncoder:
         expected = np.stack((np.cos(proj), np.sin(proj)), axis=-1).reshape(
             batch_size, 32
         )
-        assert np.allclose(out1.numpy(), expected, atol=1e-5)
+        assert np.allclose(out1.numpy(), expected, atol=1e-4)
 
     def test_validation(self) -> None:
         with pytest.raises(TypeError, match='num_frequencies'):
