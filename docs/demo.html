@@ -602,7 +602,7 @@
       <div class="field">
         <label for="model-select">Model</label>
         <select id="model-select">
-          <optgroup label="Fast (&lt; 5 MB)">
+          <optgroup label="Fast (Small MLPs / L=10)">
             <option value="csp-inat">csp-inat (0.8 MB)</option>
             <option value="csp-fmow">csp-fmow (0.8 MB)</option>
             <option value="satclip-vit16-l10">satclip-vit16-l10 (2.0 MB)</option>
@@ -615,7 +615,7 @@
             <option value="geoclosp-rn">geoclosp-rn (2.4 MB)</option>
             <option value="hydroloc">hydroloc (4.1 MB)</option>
           </optgroup>
-          <optgroup label="Medium (6–16 MB)">
+          <optgroup label="Medium (L=40 / TTE / Climplicit)">
             <option value="satclip-vit16-l40">satclip-vit16-l40 (6.0 MB)</option>
             <option value="satclip-resnet18-l40">satclip-resnet18-l40 (6.0 MB)</option>
             <option value="satclip-resnet50-l40">satclip-resnet50-l40 (6.0 MB)</option>
@@ -624,7 +624,7 @@
             <option value="tte">tte (13.1 MB)</option>
             <option value="climplicit">climplicit (16.2 MB)</option>
           </optgroup>
-          <optgroup label="Large (36–54 MB)">
+          <optgroup label="Large (RFF Capsules)">
             <option value="gtloc">gtloc (36.2 MB)</option>
             <option value="geoclip">geoclip (36.2 MB)</option>
             <option value="taxabind">taxabind (36.2 MB)</option>
@@ -632,10 +632,20 @@
             <option value="sled-s1-s2-ls">sled-s1-s2-ls (54.2 MB)</option>
             <option value="sled-s2-ls">sled-s2-ls (54.2 MB)</option>
           </optgroup>
-          <optgroup label="Quantized INT4 (69.5 MB · MRL)">
+          <optgroup label="MIND (Matryoshka · Quantized)">
             <option value="mind-64">mind-64 (69.5 MB · INT4 64-d)</option>
             <option value="mind-256">mind-256 (69.5 MB · INT4 256-d)</option>
           </optgroup>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="precision-select">Prec</label>
+        <select id="precision-select">
+          <option value="fp32" selected>FP32 (2.1 MB)</option>
+          <option value="fp16">FP16 (1.1 MB)</option>
+          <option value="int8">INT8 (0.6 MB)</option>
+          <option value="int4">INT4 (0.38 MB)</option>
         </select>
       </div>
 
@@ -722,31 +732,99 @@
       const ORT_WASM_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/';
       const WORLD_ATLAS_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json';
 
-      const MODELS = {
+      const PRECISION_META = {
+        fp32: { label: 'FP32', file: 'model.onnx' },
+        fp16: { label: 'FP16', file: 'model_fp16.onnx' },
+        int8: { label: 'INT8', file: 'model_int8.onnx' },
+        int4: { label: 'INT4', file: 'model_int4_bs32.onnx' },
+      };
+
+      const ALL_PRECISIONS = ['fp32', 'fp16', 'int8', 'int4'];
+      const MIND_PRECISIONS = ['int4', 'int8'];
+      const MIND_CHUNK_SIZE = { webgpu: 1024, wasm: 256 };
+
+      function formatSizeMb(mb) {
+        return (mb < 0.5 ? mb.toFixed(2) : mb.toFixed(1)) + ' MB';
+      }
+
+      const MODEL_CATALOG = {
+        'csp-inat': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 0.8, fp16: 0.41, int8: 0.23, int4: 0.15 } },
+        'csp-fmow': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 0.8, fp16: 0.42, int8: 0.24, int4: 0.17 } },
+        'satclip-vit16-l10': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 2.0, fp16: 1.2, int8: 0.9, int4: 0.7 } },
+        'satclip-resnet18-l10': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 2.0, fp16: 1.2, int8: 0.9, int4: 0.7 } },
+        'satclip-resnet50-l10': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 2.0, fp16: 1.2, int8: 0.9, int4: 0.7 } },
+        'osmgraphclip-ms-l10': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 2.0, fp16: 1.2, int8: 0.9, int4: 0.7 } },
+        'osmgraphclip-a-l10': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 2.0, fp16: 1.2, int8: 0.9, int4: 0.7 } },
+        sinr: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 2.1, fp16: 1.1, int8: 0.6, int4: 0.38 } },
+        'le-sinr': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 2.3, fp16: 1.2, int8: 0.6, int4: 0.42 } },
+        'geoclosp-rn': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 2.4, fp16: 1.3, int8: 0.8, int4: 0.6 } },
+        hydroloc: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 4.1, fp16: 2.1, int8: 1.1, int4: 0.7 } },
+        'satclip-vit16-l40': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 6.0, fp16: 5.0, int8: 4.6, int4: 4.5 } },
+        'satclip-resnet18-l40': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 6.0, fp16: 5.0, int8: 4.6, int4: 4.5 } },
+        'satclip-resnet50-l40': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 6.0, fp16: 5.0, int8: 4.6, int4: 4.5 } },
+        'osmgraphclip-ms-l40': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 6.0, fp16: 5.0, int8: 4.7, int4: 4.5 } },
+        'osmgraphclip-a-l40': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 6.0, fp16: 5.0, int8: 4.7, int4: 4.5 } },
+        tte: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 13.1, fp16: 9.7, int8: 8.0, int4: 7.4 } },
+        climplicit: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 16.2, fp16: 8.2, int8: 4.5, int4: 2.9 } },
+        gtloc: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 36.2, fp16: 18.1, int8: 9.5, int4: 5.9 } },
+        geoclip: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 36.2, fp16: 18.1, int8: 9.5, int4: 5.9 } },
+        taxabind: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 36.2, fp16: 18.1, int8: 9.5, int4: 5.9 } },
+        gair: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 39.2, fp16: 19.6, int8: 10.3, int4: 6.4 } },
+        'sled-s1-s2-ls': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 54.2, fp16: 27.1, int8: 14.2, int4: 8.8 } },
+        'sled-s2-ls': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 54.2, fp16: 27.1, int8: 14.2, int4: 8.8 } },
         'mind-64': {
-          url: HF_BASE + '/mind/model_int4_bs32.onnx',
-          cacheKey: 'mind/model_int4_bs32.onnx',
+          hubDir: 'mind',
+          precisions: MIND_PRECISIONS,
+          defaultPrecision: 'int4',
+          sizes: { int4: 69.5, int8: 112.5 },
           sliceDim: 64,
-          chunkSize: { webgpu: 1024, wasm: 256 },
+          dimTag: '64-d',
+          chunkSize: MIND_CHUNK_SIZE,
         },
         'mind-256': {
-          url: HF_BASE + '/mind/model_int4_bs32.onnx',
-          cacheKey: 'mind/model_int4_bs32.onnx',
+          hubDir: 'mind',
+          precisions: MIND_PRECISIONS,
+          defaultPrecision: 'int4',
+          sizes: { int4: 69.5, int8: 112.5 },
           sliceDim: 256,
-          chunkSize: { webgpu: 1024, wasm: 256 },
+          dimTag: '256-d',
+          chunkSize: MIND_CHUNK_SIZE,
         },
       };
 
-      function getModelConfig(modelId) {
-        if (Object.prototype.hasOwnProperty.call(MODELS, modelId)) {
-          return MODELS[modelId];
+      function getCatalogEntry(modelId) {
+        if (Object.prototype.hasOwnProperty.call(MODEL_CATALOG, modelId)) {
+          return MODEL_CATALOG[modelId];
         }
-        const relPath = encodeURIComponent(modelId) + '/model.onnx';
         return {
+          precisions: ['fp32'],
+          defaultPrecision: 'fp32',
+          sizes: {},
+        };
+      }
+
+      function resolvePrecisionForModel(modelId, requestedPrecision) {
+        const entry = getCatalogEntry(modelId);
+        if (requestedPrecision && entry.precisions.includes(requestedPrecision)) {
+          return requestedPrecision;
+        }
+        return entry.defaultPrecision;
+      }
+
+      function getModelConfig(modelId, requestedPrecision) {
+        const entry = getCatalogEntry(modelId);
+        const precision = resolvePrecisionForModel(modelId, requestedPrecision);
+        const precMeta = PRECISION_META[precision] || PRECISION_META.fp32;
+        const hubDir = entry.hubDir || encodeURIComponent(modelId);
+        const relPath = hubDir + '/' + precMeta.file;
+        return {
+          modelId,
+          precision,
+          precisionLabel: precMeta.label,
           url: HF_BASE + '/' + relPath,
           cacheKey: relPath,
-          sliceDim: null,
-          chunkSize: null,
+          sliceDim: entry.sliceDim || null,
+          chunkSize: entry.chunkSize || null,
         };
       }
 
@@ -831,6 +909,7 @@
       }
 
       const modelSelect = document.getElementById('model-select');
+      const precisionSelect = document.getElementById('precision-select');
       const gridSelect = document.getElementById('grid-select');
       const viewSelect = document.getElementById('view-select');
       const refitBtn = document.getElementById('refit-btn');
@@ -847,15 +926,18 @@
       const hoverMetricVal = document.getElementById('hover-metric-val');
       const hoverEmb = document.getElementById('hover-emb');
 
-      const MAX_BUFFER_CACHE_BYTES = 96 * 1024 * 1024;
+      const MAX_BUFFER_CACHE_BYTES = 140 * 1024 * 1024;
       const bufferCache = new Map();
       let bufferCacheBytes = 0;
       let activeSessionKey = '';
       let activeSessionEntry = null;
       let inFlightInference = Promise.resolve();
+      let sessionLock = Promise.resolve();
+      let activeFetchController = null;
 
       const state = {
         runId: 0,
+        preferredPrecision: 'fp32',
         landGeoJson: null,
         bitmapCanvas: null,
         bitmapVersion: 0,
@@ -875,8 +957,53 @@
         lastInferMs: 0,
         lastDownloadMs: 0,
         lastModelId: '',
+        lastPrecisionLabel: 'FP32',
         deckInstance: null,
       };
+
+      function syncModelDropdownLabels(targetPrecision) {
+        const options = modelSelect.options;
+        for (let i = 0; i < options.length; i++) {
+          const opt = options[i];
+          const mid = opt.value;
+          const entry = getCatalogEntry(mid);
+          const effPrec = resolvePrecisionForModel(mid, targetPrecision);
+          const sizeVal = entry.sizes[effPrec];
+          const sizeStr = typeof sizeVal === 'number' ? formatSizeMb(sizeVal) : '';
+          const precLabel = (PRECISION_META[effPrec] || PRECISION_META.fp32).label;
+          if (entry.dimTag) {
+            opt.textContent = mid + ' (' + sizeStr + ' · ' + precLabel + ' ' + entry.dimTag + ')';
+          } else if (effPrec !== targetPrecision && sizeStr) {
+            opt.textContent = mid + ' (' + sizeStr + ' · ' + precLabel + ')';
+          } else if (sizeStr) {
+            opt.textContent = mid + ' (' + sizeStr + ')';
+          } else {
+            opt.textContent = mid;
+          }
+        }
+      }
+
+      function syncPrecisionOptions(modelId, requestedPrecision) {
+        const entry = getCatalogEntry(modelId);
+        const effPrec = resolvePrecisionForModel(modelId, requestedPrecision);
+        precisionSelect.innerHTML = '';
+        for (let i = 0; i < entry.precisions.length; i++) {
+          const p = entry.precisions[i];
+          const meta = PRECISION_META[p] || PRECISION_META.fp32;
+          const opt = document.createElement('option');
+          opt.value = p;
+          const sizeVal = entry.sizes[p];
+          opt.textContent =
+            typeof sizeVal === 'number'
+              ? meta.label + ' (' + formatSizeMb(sizeVal) + ')'
+              : meta.label;
+          if (p === effPrec) opt.selected = true;
+          precisionSelect.appendChild(opt);
+        }
+        precisionSelect.value = effPrec;
+        syncModelDropdownLabels(effPrec);
+        return effPrec;
+      }
 
       function setStatus(text) {
         statusLine.textContent = text;
@@ -940,8 +1067,19 @@
         return { width, height, count, coords };
       }
 
-      async function fetchModelBuffer(modelId) {
-        const modelCfg = getModelConfig(modelId);
+      function evictBufferCacheFor(incomingBytes) {
+        while (
+          bufferCache.size > 0 &&
+          bufferCacheBytes + incomingBytes > MAX_BUFFER_CACHE_BYTES
+        ) {
+          const oldestKey = bufferCache.keys().next().value;
+          const oldestBuf = bufferCache.get(oldestKey);
+          bufferCache.delete(oldestKey);
+          bufferCacheBytes -= oldestBuf.byteLength;
+        }
+      }
+
+      async function fetchModelBuffer(modelCfg, signal) {
         const cacheKey = modelCfg.cacheKey || modelCfg.url;
         if (bufferCache.has(cacheKey)) {
           const cached = bufferCache.get(cacheKey);
@@ -951,19 +1089,18 @@
         }
         const url = modelCfg.url;
         const t0 = performance.now();
-        const resp = await fetch(url);
+        const resp = await fetch(url, signal ? { signal } : undefined);
         if (!resp.ok) {
           throw new Error('HTTP ' + resp.status + ' fetching ' + cacheKey);
+        }
+        const contentLen = Number(resp.headers.get('content-length')) || 0;
+        if (contentLen > 0) {
+          evictBufferCacheFor(contentLen);
         }
         const buffer = await resp.arrayBuffer();
         const downloadMs = performance.now() - t0;
         if (buffer.byteLength <= MAX_BUFFER_CACHE_BYTES) {
-          while (bufferCache.size > 0 && bufferCacheBytes + buffer.byteLength > MAX_BUFFER_CACHE_BYTES) {
-            const oldestKey = bufferCache.keys().next().value;
-            const oldestBuf = bufferCache.get(oldestKey);
-            bufferCache.delete(oldestKey);
-            bufferCacheBytes -= oldestBuf.byteLength;
-          }
+          evictBufferCacheFor(buffer.byteLength);
           bufferCache.set(cacheKey, buffer);
           bufferCacheBytes += buffer.byteLength;
         }
@@ -990,48 +1127,90 @@
         }
       }
 
-      async function getSession(modelId, forceWasm) {
-        const modelCfg = getModelConfig(modelId);
-        const assetKey = modelCfg.cacheKey || modelCfg.url;
-        const cacheKey = assetKey + ':' + (forceWasm ? 'wasm' : 'auto');
-        if (activeSessionEntry && activeSessionKey === cacheKey) {
-          return {
-            session: activeSessionEntry.session,
-            provider: activeSessionEntry.provider,
-            downloadMs: 0,
-          };
-        }
+      async function getSession(modelCfg, forceWasm, runId) {
+        let releaseLock;
+        const prevLock = sessionLock;
+        sessionLock = new Promise((resolve) => {
+          releaseLock = resolve;
+        });
+        await prevLock;
 
-        await releaseActiveSession();
+        try {
+          if (runId !== state.runId) return null;
 
-        const { buffer, downloadMs } = await fetchModelBuffer(modelId);
-        const bytes = new Uint8Array(buffer);
-
-        let session = null;
-        let provider = 'wasm';
-
-        if (!forceWasm && typeof navigator !== 'undefined' && 'gpu' in navigator) {
-          try {
-            session = await ort.InferenceSession.create(bytes, {
-              executionProviders: ['webgpu'],
-            });
-            provider = 'webgpu';
-          } catch (_webgpuErr) {
-            session = null;
+          const assetKey = modelCfg.cacheKey || modelCfg.url;
+          const cacheKey = assetKey + ':' + (forceWasm ? 'wasm' : 'auto');
+          if (activeSessionEntry && activeSessionKey === cacheKey) {
+            return {
+              session: activeSessionEntry.session,
+              provider: activeSessionEntry.provider,
+              downloadMs: 0,
+            };
           }
-        }
 
-        if (!session) {
-          session = await ort.InferenceSession.create(bytes, {
-            executionProviders: ['wasm'],
-          });
-          provider = 'wasm';
-        }
+          await releaseActiveSession();
+          if (runId !== state.runId) return null;
 
-        const entry = { session, provider, downloadMs };
-        activeSessionKey = cacheKey;
-        activeSessionEntry = entry;
-        return entry;
+          const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          activeFetchController = controller;
+          let fetched;
+          try {
+            fetched = await fetchModelBuffer(modelCfg, controller ? controller.signal : undefined);
+          } catch (fetchErr) {
+            if (fetchErr && fetchErr.name === 'AbortError' && runId !== state.runId) {
+              return null;
+            }
+            throw fetchErr;
+          } finally {
+            if (activeFetchController === controller) {
+              activeFetchController = null;
+            }
+          }
+          if (runId !== state.runId) return null;
+
+          const { buffer, downloadMs } = fetched;
+
+          const bytes = new Uint8Array(buffer);
+
+          let session = null;
+          let provider = 'wasm';
+
+          if (!forceWasm && typeof navigator !== 'undefined' && 'gpu' in navigator) {
+            try {
+              session = await ort.InferenceSession.create(bytes, {
+                executionProviders: ['webgpu'],
+              });
+              provider = 'webgpu';
+            } catch (_webgpuErr) {
+              session = null;
+            }
+          }
+
+          if (!session) {
+            session = await ort.InferenceSession.create(bytes, {
+              executionProviders: ['wasm'],
+            });
+            provider = 'wasm';
+          }
+
+          if (runId !== state.runId) {
+            if (typeof session.release === 'function') {
+              try {
+                await session.release();
+              } catch (_releaseErr) {
+                // Ignore release errors for superseded runs.
+              }
+            }
+            return null;
+          }
+
+          const entry = { session, provider, downloadMs };
+          activeSessionKey = cacheKey;
+          activeSessionEntry = entry;
+          return entry;
+        } finally {
+          releaseLock();
+        }
       }
 
       function resolveChunkSize(modelCfg, provider) {
@@ -1778,7 +1957,17 @@
           ' ms · view ' +
           Math.round(viewMs) +
           ' ms';
-        setStatus('Ready (' + state.lastModelId + ', D=' + state.embedDim + ' · ' + viewDesc + ')');
+        setStatus(
+          'Ready (' +
+            state.lastModelId +
+            ' · ' +
+            state.lastPrecisionLabel +
+            ', D=' +
+            state.embedDim +
+            ' · ' +
+            viewDesc +
+            ')'
+        );
 
         if (state.lastHoverCoord) {
           updateReadoutForCoord(state.lastHoverCoord[0], state.lastHoverCoord[1]);
@@ -1962,20 +2151,25 @@
 
       async function runPipeline() {
         const runId = ++state.runId;
+        if (activeFetchController) {
+          activeFetchController.abort();
+          activeFetchController = null;
+        }
         const modelId = modelSelect.value;
+        const precision = precisionSelect.value;
         const gridKm = Number(gridSelect.value);
 
         showError('');
         runBtn.disabled = true;
 
         try {
-          const modelCfg = getModelConfig(modelId);
+          const modelCfg = getModelConfig(modelId, precision);
           const { width, height, count, coords } = buildCoordGrid(gridKm);
           gridBadge.textContent = 'Grid: ' + width + ' × ' + height + ' (' + count.toLocaleString() + ')';
-          setStatus('Loading ' + modelId + '…');
+          setStatus('Loading ' + modelId + ' · ' + modelCfg.precisionLabel + '…');
 
-          let sessionEntry = await getSession(modelId, false);
-          if (runId !== state.runId) return;
+          let sessionEntry = await getSession(modelCfg, false, runId);
+          if (!sessionEntry || runId !== state.runId) return;
 
           setBackendBadge(sessionEntry.provider);
 
@@ -1993,8 +2187,8 @@
           } catch (runErr) {
             if (sessionEntry.provider === 'webgpu') {
               setStatus('WebGPU op unsupported, falling back to WASM…');
-              sessionEntry = await getSession(modelId, true);
-              if (runId !== state.runId) return;
+              sessionEntry = await getSession(modelCfg, true, runId);
+              if (!sessionEntry || runId !== state.runId) return;
               setBackendBadge(sessionEntry.provider);
               tInf0 = performance.now();
               infResult = await runChunkedInference(
@@ -2028,6 +2222,7 @@
           state.lastInferMs = inferMs;
           state.lastDownloadMs = sessionEntry.downloadMs;
           state.lastModelId = modelId;
+          state.lastPrecisionLabel = modelCfg.precisionLabel;
 
           applyCurrentView();
         } catch (err) {
@@ -2042,7 +2237,15 @@
         }
       }
 
-      modelSelect.addEventListener('change', runPipeline);
+      modelSelect.addEventListener('change', () => {
+        syncPrecisionOptions(modelSelect.value, state.preferredPrecision);
+        runPipeline();
+      });
+      precisionSelect.addEventListener('change', () => {
+        state.preferredPrecision = precisionSelect.value;
+        syncModelDropdownLabels(precisionSelect.value);
+        runPipeline();
+      });
       gridSelect.addEventListener('change', runPipeline);
       viewSelect.addEventListener('change', () => {
         if (state.refitTimer !== null) {
@@ -2066,6 +2269,7 @@
       coastlinesToggle.addEventListener('change', renderDeck);
       runBtn.addEventListener('click', runPipeline);
 
+      syncPrecisionOptions(modelSelect.value, state.preferredPrecision);
       syncViewControls();
       initDeck();
       loadCoastlines();
