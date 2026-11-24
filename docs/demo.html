@@ -12,7 +12,7 @@
     rel="stylesheet"
   />
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.4/dist/min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.4/dist.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
   <style>
     /* Default: Dark Digital CRT / Cartography Theme (matches docs/index.html) */
@@ -1090,7 +1090,7 @@
 
       function initDeck() {
         state.deckInstance = new deck.Deck({
-          container: 'deck-container',
+          parent: document.getElementById('deck-container'),
           views: new deck.MapView({ repeat: true }),
           initialViewState: {
             longitude: 0,
@@ -1107,13 +1107,60 @@
         });
       }
 
+      function splitAntimeridianLines(geojson) {
+        const lines = [];
+        function processRing(ring) {
+          if (!Array.isArray(ring) || ring.length < 2) return;
+          let seg = [ring[0]];
+          for (let i = 1; i < ring.length; i++) {
+            const prev = ring[i - 1];
+            const curr = ring[i];
+            if (Math.abs(curr[0] - prev[0]) > 180) {
+              if (seg.length >= 2) lines.push(seg);
+              seg = [curr];
+            } else {
+              seg.push(curr);
+            }
+          }
+          if (seg.length >= 2) lines.push(seg);
+        }
+        function walkGeom(geom) {
+          if (!geom) return;
+          if (geom.type === 'Polygon') {
+            for (const ring of geom.coordinates) processRing(ring);
+          } else if (geom.type === 'MultiPolygon') {
+            for (const poly of geom.coordinates) {
+              for (const ring of poly) processRing(ring);
+            }
+          } else if (geom.type === 'LineString') {
+            processRing(geom.coordinates);
+          } else if (geom.type === 'MultiLineString') {
+            for (const line of geom.coordinates) processRing(line);
+          } else if (geom.type === 'GeometryCollection') {
+            for (const g of geom.geometries) walkGeom(g);
+          }
+        }
+        if (geojson.type === 'FeatureCollection') {
+          for (const f of geojson.features) walkGeom(f.geometry);
+        } else if (geojson.type === 'Feature') {
+          walkGeom(geojson.geometry);
+        } else {
+          walkGeom(geojson);
+        }
+        return {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'MultiLineString', coordinates: lines },
+        };
+      }
+
       async function loadCoastlines() {
         try {
           const resp = await fetch(WORLD_ATLAS_URL);
           if (!resp.ok) return;
           const topo = await resp.json();
           if (typeof topojson !== 'undefined' && topo.objects && topo.objects.land) {
-            state.landGeoJson = topojson.feature(topo, topo.objects.land);
+            state.landGeoJson = splitAntimeridianLines(topojson.feature(topo, topo.objects.land));
             renderDeck();
           }
         } catch (_err) {
