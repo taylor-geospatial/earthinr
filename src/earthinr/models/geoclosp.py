@@ -72,7 +72,7 @@ class GeoCLOSP_Weights(WeightsEnum):  # noqa: N801
                 '4979f3a0cd444fd005bfdbf208fe6b35fc282068ad7efa609e93a6461b12272c'
             ),
             'onnx_sha256': (
-                '821da765790872bc766e5111abb842a30736cc2f6cdfa90cde1cf324e6d0e5a8'
+                'ea1db69eaf99e6d9bb2bf7c61603e9a8e23d19817219353fa8a1468ed4ae64df'
             ),
             'license': 'CreativeML-OpenRAIL-M',
         },

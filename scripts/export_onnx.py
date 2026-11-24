@@ -19,6 +19,7 @@ Run with:
 from __future__ import annotations
 
 import argparse
+import copy
 import gc
 import hashlib
 import json
@@ -33,6 +34,7 @@ import onnx
 import onnxruntime as ort
 import torch
 from huggingface_hub import HfApi, hf_hub_download
+from onnx import TensorProto, numpy_helper
 from torch import Tensor, nn
 
 from earthinr.models._base import LocationEncoder
@@ -54,10 +56,15 @@ from earthinr.models.rff_capsule import (
     sled,
     taxabind,
 )
-from earthinr.models.satclip import SatCLIP_Weights, satclip
+from earthinr.models.satclip import (
+    POLE_LATITUDE_EPS_DEGREES,
+    SatCLIP_Weights,
+    StableAnalyticSphericalHarmonics,
+    satclip,
+)
 from earthinr.models.sinr import SINR_Weights, sinr
 from earthinr.models.terranova import TerraNova_Weights, terranova
-from earthinr.models.tte import TTE_Weights, tte
+from earthinr.models.tte import TTE_Weights, TTELocationEncoder, tte
 
 ZOO_REPO_ID = 'taylor-geospatial/earthinr-zoo'
 MIND_REPO_ID = 'taylor-geospatial/MIND'
@@ -179,6 +186,218 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
 )
 
 MODEL_SPECS_BY_ID: dict[str, ModelSpec] = {spec.model_id: spec for spec in MODEL_SPECS}
+
+
+def _tree_cat(tensors: list[Tensor], *, dim: int = 1, max_arity: int = 4) -> Tensor:
+    """Concatenate *tensors* via a balanced tree so every ONNX ``Concat`` has <= *max_arity* inputs.
+
+    WebGPU limits compute shaders to 8 storage buffers per stage (inputs + output),
+    so a single wide ``Concat`` (e.g., 10 or 40 inputs) fails pipeline validation.
+    """
+    current = list(tensors)
+    while len(current) > 1:
+        next_level: list[Tensor] = []
+        for idx in range(0, len(current), max_arity):
+            chunk = current[idx : idx + max_arity]
+            next_level.append(
+                chunk[0] if len(chunk) == 1 else torch.cat(chunk, dim=dim)
+            )
+        current = next_level
+    return current[0]
+
+
+class _WebGPUAnalyticSphericalHarmonics(nn.Module):
+    """Float32, WebGPU/WASM-compatible drop-in for ``StableAnalyticSphericalHarmonics``.
+
+    Replaces the default ``float64`` Legendre recurrence (which emits ``Cos(7)`` /
+    ``Sin(7)`` on ``DOUBLE``, unsupported in ``onnxruntime-web``), replaces
+    ``torch.flip`` (which emits negative-step ``Slice``, silently miscomputed by
+    ``onnxruntime-web`` WebGPU) with ``Gather`` reversal, and keeps every ``Concat``
+    node at arity ``<= 4`` (within WebGPU's 8-storage-buffer shader limit), while
+    preserving near-pole precision via ``x = -sin(lat)``, ``u = cos(lat)`` and
+    degree-reduced azimuths.
+    """
+
+    orders: Tensor
+    diag_coeffs: Tensor
+    subdiag_coeffs: Tensor
+    alpha: Tensor
+    beta: Tensor
+
+    def __init__(self, source: StableAnalyticSphericalHarmonics) -> None:
+        """Initialize from a ``StableAnalyticSphericalHarmonics`` instance."""
+        super().__init__()
+        self.legendre_polys = source.legendre_polys
+        self.embedding_dim = source.embedding_dim
+        self.register_buffer(
+            'orders', source.orders.to(dtype=torch.float32), persistent=False
+        )
+        self.register_buffer(
+            'diag_coeffs', source.diag_coeffs.to(dtype=torch.float32), persistent=False
+        )
+        self.register_buffer(
+            'subdiag_coeffs',
+            source.subdiag_coeffs.to(dtype=torch.float32),
+            persistent=False,
+        )
+        self.register_buffer(
+            'alpha', source.alpha.to(dtype=torch.float32), persistent=False
+        )
+        self.register_buffer(
+            'beta', source.beta.to(dtype=torch.float32), persistent=False
+        )
+        for degree in range(1, self.legendre_polys):
+            self.register_buffer(
+                f'_rev_{degree}',
+                torch.arange(degree - 1, -1, -1, dtype=torch.int64),
+                persistent=False,
+            )
+
+    def forward(self, coords: Tensor) -> Tensor:
+        """Evaluate real spherical harmonics in pure float32 for WebGPU/WASM."""
+        n_polys = self.legendre_polys
+        lonlat = coords.to(dtype=torch.float32)
+        lon = lonlat[:, 0]
+        lat = lonlat[:, 1].clamp(
+            min=-90.0 + POLE_LATITUDE_EPS_DEGREES, max=90.0 - POLE_LATITUDE_EPS_DEGREES
+        )
+
+        # x = cos(deg2rad(lat + 90)) = -sin(deg2rad(lat)), u = sin(deg2rad(lat + 90)) = cos(deg2rad(lat))
+        # Avoids float32 cancellation in sqrt(1 - x^2) near poles.
+        lat_rad = torch.deg2rad(lat)
+        x = -torch.sin(lat_rad)
+        u = torch.cos(lat_rad)
+
+        batch_size = lonlat.shape[0]
+        order_values = self.orders
+        p00 = lonlat.new_full((batch_size,), math.sqrt(1.0 / (4.0 * math.pi)))
+        diag_terms: list[Tensor] = [p00]
+        if n_polys > 1:
+            diag_values = (
+                p00.unsqueeze(1)
+                * self.diag_coeffs[1:].unsqueeze(0)
+                * u.unsqueeze(1).pow(order_values[1:].unsqueeze(0))
+            )
+            diag_terms.extend(diag_values.unbind(dim=1))
+
+        # Keep each Legendre degree row unpadded at width (degree + 1) to avoid
+        # zero-padding allocations and high-arity torch.stack Concat nodes.
+        rows: list[Tensor] = [diag_terms[0].unsqueeze(1)]
+        if n_polys > 1:
+            rows.append(
+                torch.cat(
+                    (
+                        (self.subdiag_coeffs[0] * x * diag_terms[0]).unsqueeze(1),
+                        diag_terms[1].unsqueeze(1),
+                    ),
+                    dim=1,
+                )
+            )
+        for degree in range(2, n_polys):
+            recurrence = (
+                self.alpha[degree, : degree - 1].unsqueeze(0)
+                * x.unsqueeze(1)
+                * rows[degree - 1][:, : degree - 1]
+                - self.beta[degree, : degree - 1].unsqueeze(0)
+                * rows[degree - 2][:, : degree - 1]
+            )
+            rows.append(
+                torch.cat(
+                    (
+                        recurrence,
+                        (
+                            self.subdiag_coeffs[degree - 1] * x * diag_terms[degree - 1]
+                        ).unsqueeze(1),
+                        diag_terms[degree].unsqueeze(1),
+                    ),
+                    dim=1,
+                )
+            )
+
+        phases_deg = torch.remainder(
+            (lon + 180.0).unsqueeze(1) * order_values.unsqueeze(0), 360.0
+        )
+        phases = torch.deg2rad(phases_deg)
+        sin_terms = torch.sin(phases)
+        cos_terms = torch.cos(phases)
+
+        degree_blocks: list[Tensor] = []
+        for degree in range(n_polys):
+            row = rows[degree]
+            center = (math.pi * row[:, 0]).unsqueeze(1)
+            if degree == 0:
+                degree_blocks.append(center)
+                continue
+            base = math.sqrt(2.0) * row[:, 1 : degree + 1]
+            rev_idx = getattr(self, f'_rev_{degree}')
+            negative = torch.index_select(
+                base * sin_terms[:, 1 : degree + 1], dim=1, index=rev_idx
+            )
+            positive = base * cos_terms[:, 1 : degree + 1]
+            degree_blocks.append(torch.cat((negative, center, positive), dim=1))
+
+        return _tree_cat(degree_blocks, dim=1, max_arity=4)
+
+
+class _WebGPUTTEOnnxWrapper(nn.Module):
+    """Spatial ONNX wrapper for TTE that swaps ``(lon, lat)`` without negative-step Slice."""
+
+    def __init__(self, encoder: TTELocationEncoder) -> None:
+        """Initialize the WebGPU-safe TTE wrapper."""
+        super().__init__()
+        self.model = encoder.model
+
+    def forward(self, coords: Tensor) -> Tensor:
+        """Encode ``(lon, lat)`` degrees by swapping columns via ``torch.stack``."""
+        latlon = torch.stack((coords[:, 1], coords[:, 0]), dim=-1)
+        return self.model(latlon)
+
+
+def _prepare_export_wrapper(
+    encoder: LocationEncoder, *, temporal: bool
+) -> tuple[nn.Module, bool]:
+    """Build a WebGPU/WASM-compatible ONNX export wrapper without mutating *encoder*.
+
+    Replaces any ``StableAnalyticSphericalHarmonics`` submodules on a shallow copy
+    with :class:`_WebGPUAnalyticSphericalHarmonics` (float32, no ``DOUBLE`` ops,
+    no negative-step ``Slice``) and avoids ``coords.flip(-1)`` for TTE.
+
+    Returns:
+        Tuple ``(export_wrapper, adapted)`` where ``adapted`` is True when the
+        export graph uses a float32/WebGPU-safe rewrite distinct from *encoder*.
+    """
+    if isinstance(encoder, TTELocationEncoder):
+        wrapper: nn.Module = _WebGPUTTEOnnxWrapper(encoder)
+        wrapper.eval()
+        return wrapper, True
+
+    has_sh = any(
+        isinstance(m, StableAnalyticSphericalHarmonics) for m in encoder.modules()
+    )
+    if has_sh:
+        adapted_encoder = copy.deepcopy(encoder)
+        for parent in adapted_encoder.modules():
+            for child_name, child in list(parent.named_children()):
+                if isinstance(child, StableAnalyticSphericalHarmonics):
+                    setattr(
+                        parent, child_name, _WebGPUAnalyticSphericalHarmonics(child)
+                    )
+        adapted_encoder.eval()
+        wrapper = (
+            _SpatiotemporalOnnxWrapper(adapted_encoder)
+            if temporal
+            else _SpatialOnnxWrapper(adapted_encoder)
+        )
+        wrapper.eval()
+        return wrapper, True
+
+    wrapper = (
+        _SpatiotemporalOnnxWrapper(encoder)
+        if temporal
+        else _SpatialOnnxWrapper(encoder)
+    )
+    wrapper.eval()
+    return wrapper, False
 
 
 class _SpatialOnnxWrapper(nn.Module):
@@ -425,6 +644,62 @@ def _cosine_similarities(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.where(norms > 0.0, dots / np.maximum(norms, 1e-12), 1.0)
 
 
+def _verify_webgpu_compatible(onnx_path: Path, model_id: str) -> None:
+    """Assert that an ONNX graph contains no ``DOUBLE`` ops or negative-step ``Slice``."""
+    proto = onnx.load(str(onnx_path), load_external_data=False)
+    graph = proto.graph
+
+    double_items: list[str] = []
+    for tensor in graph.initializer:
+        if tensor.data_type == TensorProto.DOUBLE:
+            double_items.append(f'initializer:{tensor.name}')
+    for vi in [*graph.input, *graph.output, *graph.value_info]:
+        if (
+            vi.type.HasField('tensor_type')
+            and vi.type.tensor_type.elem_type == TensorProto.DOUBLE
+        ):
+            double_items.append(f'value:{vi.name}')
+    for node in graph.node:
+        for attr in node.attribute:
+            if (
+                node.op_type == 'Cast'
+                and attr.name == 'to'
+                and attr.i == TensorProto.DOUBLE
+            ):
+                double_items.append(f'Cast:{node.name}')
+            if attr.HasField('t') and attr.t.data_type == TensorProto.DOUBLE:
+                double_items.append(f'{node.op_type}:{node.name}')
+    if double_items:
+        raise AssertionError(
+            f'{model_id}: found {len(double_items)} DOUBLE graph elements '
+            f'(incompatible with onnxruntime-web), e.g. {double_items[:5]}'
+        )
+
+    inits = {t.name: numpy_helper.to_array(t) for t in graph.initializer}
+    neg_slices: list[str] = []
+    for node in graph.node:
+        if node.op_type == 'Slice' and len(node.input) >= 5:
+            steps_name = node.input[4]
+            if steps_name in inits and bool((inits[steps_name] < 0).any()):
+                neg_slices.append(node.name)
+    if neg_slices:
+        raise AssertionError(
+            f'{model_id}: found {len(neg_slices)} negative-step Slice nodes '
+            f'(miscomputed by onnxruntime-web WebGPU), e.g. {neg_slices[:5]}'
+        )
+
+    wide_concats = [
+        (node.name, len(node.input))
+        for node in graph.node
+        if node.op_type == 'Concat' and len(node.input) > 6
+    ]
+    if wide_concats:
+        raise AssertionError(
+            f'{model_id}: found {len(wide_concats)} Concat nodes with >6 inputs '
+            f'(exceeds WebGPU maxStorageBuffersPerShaderStage=8), e.g. {wide_concats[:5]}'
+        )
+
+
 def verify_onnx_parity(
     onnx_path: Path,
     wrapper: nn.Module,
@@ -432,6 +707,7 @@ def verify_onnx_parity(
     *,
     max_abs_tol: float = DEFAULT_MAX_ABS_TOL,
     min_cos_sim: float = DEFAULT_MIN_COS_SIM,
+    reference_wrapper: nn.Module | None = None,
 ) -> dict[str, Any]:
     """Verify ONNX graph validity, dynamic schema, and PyTorch/ORT numerical parity.
 
@@ -441,11 +717,14 @@ def verify_onnx_parity(
         spec: Model specification.
         max_abs_tol: Maximum allowed absolute difference across all test batches.
         min_cos_sim: Minimum allowed per-sample cosine similarity.
+        reference_wrapper: Optional unmodified reference PyTorch wrapper (e.g.,
+            float64 spherical harmonics) checked for cosine parity alongside *wrapper*.
 
     Returns:
         Dictionary of parity metrics and I/O schema metadata.
     """
     onnx.checker.check_model(str(onnx_path))
+    _verify_webgpu_compatible(onnx_path, spec.model_id)
 
     external_data_path = Path(f'{onnx_path}.data')
     if external_data_path.exists():
@@ -460,9 +739,13 @@ def verify_onnx_parity(
     sum_abs_diff = 0.0
     total_elements = 0
     min_cosine_sim = 1.0
+    ref_max_abs_diff = 0.0
+    ref_min_cosine_sim = 1.0
     per_batch: dict[str, dict[str, float]] = {}
 
     wrapper.eval()
+    if reference_wrapper is not None:
+        reference_wrapper.eval()
     for batch_size in TEST_BATCH_SIZES:
         coords_np, years_np = make_test_batch(batch_size)
         coords_t = torch.from_numpy(coords_np)
@@ -473,6 +756,15 @@ def verify_onnx_parity(
                 wrapper(coords_t, years_t).detach().cpu().numpy()
                 if spec.temporal
                 else wrapper(coords_t).detach().cpu().numpy()
+            )
+            ref_out = (
+                (
+                    reference_wrapper(coords_t, years_t).detach().cpu().numpy()
+                    if spec.temporal
+                    else reference_wrapper(coords_t).detach().cpu().numpy()
+                )
+                if reference_wrapper is not None
+                else None
             )
 
         feed: dict[str, np.ndarray] = {'coords': coords_np}
@@ -508,6 +800,13 @@ def verify_onnx_parity(
             'mean_abs_diff': b_mean,
             'min_cosine_sim': b_cos,
         }
+        if ref_out is not None:
+            ref_abs = np.abs(ref_out - ort_out)
+            ref_max_abs_diff = max(ref_max_abs_diff, float(np.max(ref_abs)))
+            ref_min_cosine_sim = min(
+                ref_min_cosine_sim,
+                float(np.min(_cosine_similarities(ref_out, ort_out))),
+            )
 
     mean_abs_diff = sum_abs_diff / max(total_elements, 1)
 
@@ -521,8 +820,15 @@ def verify_onnx_parity(
             f'{spec.model_id}: min_cosine_sim={min_cosine_sim:.8f} below '
             f'threshold {min_cos_sim:.8f}'
         )
+    if reference_wrapper is not None and (
+        math.isnan(ref_min_cosine_sim) or ref_min_cosine_sim < min_cos_sim
+    ):
+        raise AssertionError(
+            f'{spec.model_id}: ref_min_cosine_sim={ref_min_cosine_sim:.8f} below '
+            f'threshold {min_cos_sim:.8f}'
+        )
 
-    return {
+    result: dict[str, Any] = {
         'inputs': in_meta,
         'outputs': out_meta,
         'max_abs_diff': max_abs_diff,
@@ -530,6 +836,10 @@ def verify_onnx_parity(
         'min_cosine_sim': min_cosine_sim,
         'per_batch': per_batch,
     }
+    if reference_wrapper is not None:
+        result['ref_max_abs_diff'] = ref_max_abs_diff
+        result['ref_min_cosine_sim'] = ref_min_cosine_sim
+    return result
 
 
 def export_model(
@@ -562,12 +872,13 @@ def export_model(
 
     encoder = spec.builder()
     encoder.eval()
-    wrapper: nn.Module = (
+    ref_wrapper: nn.Module = (
         _SpatiotemporalOnnxWrapper(encoder)
         if spec.temporal
         else _SpatialOnnxWrapper(encoder)
     )
-    wrapper.eval()
+    ref_wrapper.eval()
+    wrapper, adapted = _prepare_export_wrapper(encoder, temporal=spec.temporal)
 
     if not (skip_existing and onnx_path.exists()):
         # Use dummy batch size > 1 so torch.export does not specialize dim 0 to 1.
@@ -617,13 +928,18 @@ def export_model(
     del proto_meta
 
     parity = verify_onnx_parity(
-        onnx_path, wrapper, spec, max_abs_tol=max_abs_tol, min_cos_sim=min_cos_sim
+        onnx_path,
+        wrapper,
+        spec,
+        max_abs_tol=max_abs_tol,
+        min_cos_sim=min_cos_sim,
+        reference_wrapper=ref_wrapper if adapted else None,
     )
 
     size_bytes = onnx_path.stat().st_size
     digest = sha256_file(onnx_path)
 
-    del wrapper, encoder
+    del wrapper, ref_wrapper, encoder
     gc.collect()
 
     return {
@@ -813,10 +1129,16 @@ def main() -> None:
         )
         records.append(rec)
         size_mb = rec['size_bytes'] / (1024 * 1024)
+        ref_str = (
+            f' | ref_max_diff={rec["ref_max_abs_diff"]:.2e}'
+            f' | ref_min_cos={rec["ref_min_cosine_sim"]:.8f}'
+            if 'ref_max_abs_diff' in rec
+            else ''
+        )
         print(
             f'  OK {model_id:22s} | {size_mb:7.2f} MiB | opset={rec["opset"]} | '
             f'max_diff={rec["max_abs_diff"]:.2e} | mean_diff={rec["mean_abs_diff"]:.2e} | '
-            f'min_cos={rec["min_cosine_sim"]:.8f} | sha256={rec["sha256"][:16]}...',
+            f'min_cos={rec["min_cosine_sim"]:.8f}{ref_str} | sha256={rec["sha256"][:16]}...',
             flush=True,
         )
 
