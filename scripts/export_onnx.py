@@ -2,14 +2,17 @@
 # Copyright (c) Taylor Geospatial. All rights reserved.
 # Licensed under the MIT License.
 
-"""Export and verify dynamic-batch ONNX models for taylor-geospatial/earthinr-zoo.
+"""Export, quantize, and verify dynamic-batch ONNX models for EarthINR.
 
-Exports all 26 location encoders hosted in ``taylor-geospatial/earthinr-zoo`` to
-single-file, self-contained ONNX graphs (opset 18 by default) with dynamic batch
-dimension 0, verifies strict numerical parity against PyTorch via
-``onnxruntime`` across multiple batch sizes and diverse global coordinates,
-optionally checks ``taylor-geospatial/MIND/mind.onnx`` parity, and optionally
-uploads ``<model_id>/model.onnx`` files to Hugging Face Hub.
+Exports all 26 location encoders hosted in ``taylor-geospatial/earthinr-zoo``
+(plus ``mind`` as ``(lon, lat) -> (B, 3072)``) to single-file, self-contained
+ONNX graphs (opset 18 by default) with dynamic batch dimension 0, optionally
+applies mixed-FP16 or weight-only INT8/INT4 ``MatMulNBits`` quantization while
+keeping positional encodings and first ``w0=30`` SIREN/H-SIREN layers in FP32,
+verifies numerical parity against PyTorch via ``onnxruntime`` across multiple
+batch sizes and diverse global coordinates, optionally checks
+``taylor-geospatial/MIND/mind.onnx`` parity, and optionally uploads staged ONNX
+files to Hugging Face Hub.
 
 Run with:
     uv run --with onnx --with onnxruntime --with onnxscript \
@@ -27,14 +30,14 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import onnx
 import onnxruntime as ort
 import torch
 from huggingface_hub import HfApi, hf_hub_download
-from onnx import TensorProto, numpy_helper
+from onnx import TensorProto, helper, numpy_helper
 from torch import Tensor, nn
 
 from earthinr.models._base import LocationEncoder
@@ -71,18 +74,28 @@ MIND_REPO_ID = 'taylor-geospatial/MIND'
 DEFAULT_OPSET = 18
 DEFAULT_MAX_ABS_TOL = 1e-4
 DEFAULT_MIN_COS_SIM = 0.99999
+DEFAULT_BLOCK_SIZE = 128
+QUANTIZE_CHOICES: tuple[str, ...] = ('none', 'fp16', 'int8', 'int4')
+QuantizeMode = Literal['none', 'fp16', 'int8', 'int4']
+_DEFAULT_PARITY_THRESHOLDS: dict[str, tuple[float, float]] = {
+    'none': (DEFAULT_MAX_ABS_TOL, DEFAULT_MIN_COS_SIM),
+    'fp16': (0.25, 0.999),
+    'int8': (2.0, 0.99),
+    'int4': (15.0, 0.70),
+}
 TEST_BATCH_SIZES = (1, 7, 32)
 _TEMP_OUTPUT_NAME = '_earthinr_embedding_output'
 
 
 @dataclass(frozen=True)
 class ModelSpec:
-    """Specification for an ``earthinr-zoo`` model to export to ONNX."""
+    """Specification for an EarthINR model to export to ONNX."""
 
     model_id: str
     builder: Callable[[], LocationEncoder]
     output_dim: int
     temporal: bool = False
+    zoo: bool = True
 
 
 MODEL_SPECS: tuple[ModelSpec, ...] = (
@@ -183,9 +196,20 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         lambda: geoclosp(weights=GeoCLOSP_Weights.RN50_L10, device='cpu'),
         384,
     ),
+    ModelSpec(
+        'mind',
+        lambda: mind(
+            weights=MIND_Weights.MIND, feature='pooled', dim=3072, device='cpu'
+        ),
+        3072,
+        zoo=False,
+    ),
 )
 
 MODEL_SPECS_BY_ID: dict[str, ModelSpec] = {spec.model_id: spec for spec in MODEL_SPECS}
+ZOO_MODEL_IDS: tuple[str, ...] = tuple(
+    spec.model_id for spec in MODEL_SPECS if spec.zoo
+)
 
 
 def _tree_cat(tensors: list[Tensor], *, dim: int = 1, max_arity: int = 4) -> Tensor:
@@ -842,33 +866,322 @@ def verify_onnx_parity(
     return result
 
 
+def _quantized_filename(quantize: str, block_size: int) -> str:
+    """Return the staged ONNX filename for a quantization mode and block size."""
+    if quantize == 'none':
+        return 'model.onnx'
+    if quantize == 'fp16':
+        return 'model_fp16.onnx'
+    if block_size == DEFAULT_BLOCK_SIZE:
+        return f'model_{quantize}.onnx'
+    return f'model_{quantize}_bs{block_size}.onnx'
+
+
+def _get_protected_linear_nodes(model_id: str, model: onnx.ModelProto) -> set[str]:
+    """Return ``Gemm``/``MatMul`` node names that must remain in FP32.
+
+    Protects all coordinate positional-encoding ``MatMul`` nodes (e.g., RFF
+    frequency projections), dynamic-weight matmuls, raw low-dimensional input
+    layers, and the first ``w0=30`` SIREN/H-SIREN layer across ``mind``,
+    ``climplicit``, ``satclip-*``, and ``osmgraphclip-*``.
+    """
+    inits = {t.name: tuple(t.dims) for t in model.graph.initializer}
+    protected: set[str] = set()
+
+    for node in model.graph.node:
+        if node.op_type not in ('Gemm', 'MatMul'):
+            continue
+        if node.op_type == 'MatMul':
+            protected.add(node.name)
+            continue
+
+        w_name = node.input[1]
+        shape = inits.get(w_name)
+        if shape is None:
+            protected.add(node.name)
+            continue
+
+        is_protected_siren_first = (
+            (model_id == 'mind' and (shape == (3072, 2) or 'first' in w_name))
+            or (
+                model_id == 'climplicit'
+                and ('layers.0.' in w_name or shape == (512, 4))
+            )
+            or (
+                model_id.startswith(('satclip-', 'osmgraphclip-'))
+                and 'layers.0.' in w_name
+            )
+            or (len(shape) == 2 and min(shape) <= 4)
+        )
+        if is_protected_siren_first:
+            protected.add(node.name)
+
+    return protected
+
+
+def _convert_hidden_gemm_to_fp16(
+    fp32_path: Path, out_path: Path, exclude_gemm_names: set[str]
+) -> None:
+    """Convert only non-excluded hidden ``Gemm`` nodes to FP16.
+
+    Wraps each selected ``Gemm`` in ``Cast(FP32->FP16) -> Gemm(FP16) ->
+    Cast(FP16->FP32)`` and stores its weight/bias initializers in ``float16``,
+    leaving positional encodings, trigonometric operations, and first ``w0=30``
+    SIREN layers strictly untouched in FP32 (avoiding the inter-blocked-node
+    FP16 cast regression in ``onnxconverter_common.float16``).
+    """
+    model = onnx.load(str(fp32_path), load_external_data=True)
+    graph = model.graph
+    inits = {t.name: t for t in graph.initializer}
+    fp16_inits: dict[str, str] = {}
+    new_nodes: list[onnx.NodeProto] = []
+
+    for node in graph.node:
+        if node.op_type == 'Gemm' and node.name not in exclude_gemm_names:
+            x_in = node.input[0]
+            x_16 = f'{node.name}__x_fp16'
+            new_nodes.append(
+                helper.make_node(
+                    'Cast',
+                    [x_in],
+                    [x_16],
+                    to=TensorProto.FLOAT16,
+                    name=f'{node.name}__cast_in',
+                )
+            )
+            new_inputs = [x_16]
+            for idx in range(1, len(node.input)):
+                inp = node.input[idx]
+                if inp in inits:
+                    if inp not in fp16_inits:
+                        arr = numpy_helper.to_array(inits[inp]).astype(np.float16)
+                        name16 = f'{inp}__fp16'
+                        graph.initializer.append(
+                            numpy_helper.from_array(arr, name=name16)
+                        )
+                        fp16_inits[inp] = name16
+                    new_inputs.append(fp16_inits[inp])
+                else:
+                    new_inputs.append(inp)
+            y_16 = f'{node.name}__y_fp16'
+            g_node = helper.make_node('Gemm', new_inputs, [y_16], name=node.name)
+            g_node.attribute.extend(node.attribute)
+            new_nodes.append(g_node)
+            new_nodes.append(
+                helper.make_node(
+                    'Cast',
+                    [y_16],
+                    [node.output[0]],
+                    to=TensorProto.FLOAT,
+                    name=f'{node.name}__cast_out',
+                )
+            )
+        else:
+            new_nodes.append(node)
+
+    graph.ClearField('node')
+    graph.node.extend(new_nodes)
+    used = {inp for n in graph.node for inp in n.input}
+    kept = [t for t in graph.initializer if t.name in used]
+    graph.ClearField('initializer')
+    graph.initializer.extend(kept)
+    onnx.save_model(model, str(out_path), save_as_external_data=False)
+    del model
+    gc.collect()
+
+
+def _gemm_to_matmul_add(
+    model: onnx.ModelProto, exclude_nodes: set[str]
+) -> tuple[onnx.ModelProto, list[str]]:
+    """Rewrite non-excluded ``Gemm(A, B, C)`` nodes into ``MatMul(A, B^T) + Add(C)``.
+
+    Deduplicates transposed weight initializers when multiple ``Gemm`` nodes
+    share the same weight tensor (required for ``climplicit``'s four monthly
+    passes) and prunes unreferenced original weights.
+    """
+    rewritten = copy.deepcopy(model)
+    graph = rewritten.graph
+    init_map = {t.name: t for t in graph.initializer}
+    transposed_cache: dict[str, str] = {}
+    referenced_orig_weights: set[str] = set()
+    replaced_orig_weights: set[str] = set()
+    new_nodes: list[onnx.NodeProto] = []
+    target_matmul_names: list[str] = []
+
+    for node in graph.node:
+        if node.op_type != 'Gemm' or node.name in exclude_nodes:
+            for inp in node.input:
+                if inp in init_map:
+                    referenced_orig_weights.add(inp)
+            new_nodes.append(node)
+            continue
+
+        attrs = {a.name: helper.get_attribute_value(a) for a in node.attribute}
+        alpha = float(attrs.get('alpha', 1.0))
+        beta = float(attrs.get('beta', 1.0))
+        trans_a = int(attrs.get('transA', 0))
+        trans_b = int(attrs.get('transB', 0))
+        w_name = node.input[1]
+        if (
+            trans_a != 0
+            or abs(alpha - 1.0) > 1e-6
+            or abs(beta - 1.0) > 1e-6
+            or w_name not in init_map
+        ):
+            for inp in node.input:
+                if inp in init_map:
+                    referenced_orig_weights.add(inp)
+            new_nodes.append(node)
+            continue
+
+        if w_name not in transposed_cache:
+            w_arr = numpy_helper.to_array(init_map[w_name])
+            w_t = np.ascontiguousarray(w_arr.T if trans_b == 1 else w_arr)
+            t_name = f'{w_name}__matmul_T'
+            graph.initializer.append(numpy_helper.from_array(w_t, name=t_name))
+            transposed_cache[w_name] = t_name
+        replaced_orig_weights.add(w_name)
+        t_name = transposed_cache[w_name]
+
+        mm_name = f'{node.name}__matmul'
+        target_matmul_names.append(mm_name)
+        if len(node.input) >= 3 and node.input[2]:
+            mm_out = f'{node.output[0]}__mm_out'
+            mm_node = helper.make_node(
+                'MatMul', [node.input[0], t_name], [mm_out], name=mm_name
+            )
+            add_node = helper.make_node(
+                'Add',
+                [mm_out, node.input[2]],
+                [node.output[0]],
+                name=f'{node.name}__add',
+            )
+            referenced_orig_weights.add(node.input[2])
+            new_nodes.extend([mm_node, add_node])
+        else:
+            mm_node = helper.make_node(
+                'MatMul', [node.input[0], t_name], [node.output[0]], name=mm_name
+            )
+            new_nodes.append(mm_node)
+
+    graph.ClearField('node')
+    graph.node.extend(new_nodes)
+
+    dead = replaced_orig_weights - referenced_orig_weights
+    if dead:
+        kept_inits = [t for t in graph.initializer if t.name not in dead]
+        graph.ClearField('initializer')
+        graph.initializer.extend(kept_inits)
+
+    return rewritten, target_matmul_names
+
+
+def _deduplicate_initializers(model: onnx.ModelProto) -> int:
+    """Deduplicate identical constant initializers (e.g., shared ``MatMulNBits`` weights)."""
+    graph = model.graph
+    seen: dict[tuple[int, tuple[int, ...], bytes], str] = {}
+    rename: dict[str, str] = {}
+    kept: list[onnx.TensorProto] = []
+    for tensor in graph.initializer:
+        arr = numpy_helper.to_array(tensor)
+        key = (tensor.data_type, tuple(tensor.dims), arr.tobytes())
+        if key in seen:
+            rename[tensor.name] = seen[key]
+        else:
+            seen[key] = tensor.name
+            kept.append(tensor)
+    if not rename:
+        return 0
+    for node in graph.node:
+        for idx, inp in enumerate(node.input):
+            if inp in rename:
+                node.input[idx] = rename[inp]
+    graph.ClearField('initializer')
+    graph.initializer.extend(kept)
+    return len(rename)
+
+
+def _quantize_matmul_nbits(
+    fp32_path: Path,
+    out_path: Path,
+    exclude_nodes: set[str],
+    *,
+    bits: int,
+    block_size: int = DEFAULT_BLOCK_SIZE,
+) -> dict[str, int]:
+    """Quantize non-excluded hidden linear layers to weight-only ``MatMulNBits``."""
+    from onnxruntime.quantization import matmul_nbits_quantizer
+
+    fp32_model = onnx.load(str(fp32_path), load_external_data=True)
+    mm_model, target_mm_names = _gemm_to_matmul_add(fp32_model, exclude_nodes)
+    target_mm_set = set(target_mm_names)
+    all_mm_exclude = {
+        node.name
+        for node in mm_model.graph.node
+        if node.op_type == 'MatMul' and node.name not in target_mm_set
+    } | exclude_nodes
+
+    quant = matmul_nbits_quantizer.MatMulNBitsQuantizer(
+        model=mm_model,
+        bits=bits,
+        block_size=block_size,
+        is_symmetric=False,
+        nodes_to_exclude=sorted(all_mm_exclude),
+    )
+    quant.process()
+    q_model = quant.model.model
+    dedup_count = _deduplicate_initializers(q_model)
+    onnx.save_model(q_model, str(out_path), save_as_external_data=False)
+    nbits_nodes = sum(1 for node in q_model.graph.node if node.op_type == 'MatMulNBits')
+    del fp32_model, mm_model, quant, q_model
+    gc.collect()
+    return {'nbits_nodes': nbits_nodes, 'dedup_inits': dedup_count}
+
+
 def export_model(
     spec: ModelSpec,
     staging_dir: Path,
     *,
     opset: int = DEFAULT_OPSET,
-    max_abs_tol: float = DEFAULT_MAX_ABS_TOL,
-    min_cos_sim: float = DEFAULT_MIN_COS_SIM,
+    quantize: str = 'none',
+    block_size: int = DEFAULT_BLOCK_SIZE,
+    max_abs_tol: float | None = None,
+    min_cos_sim: float | None = None,
     skip_existing: bool = False,
 ) -> dict[str, Any]:
-    """Export one ``earthinr-zoo`` location encoder to ONNX and verify parity.
+    """Export one EarthINR location encoder to ONNX and verify parity.
 
     Args:
         spec: Model specification to export.
-        staging_dir: Root directory where ``<model_id>/model.onnx`` is written.
+        staging_dir: Root directory where ``<model_id>/<filename>`` is written.
         opset: Target ONNX opset version.
-        max_abs_tol: Maximum allowed absolute difference vs PyTorch.
-        min_cos_sim: Minimum allowed cosine similarity vs PyTorch.
-        skip_existing: If True and ``model.onnx`` already exists, skip export
-            and run parity verification directly on the existing file.
+        quantize: Post-export quantization mode (``'none'``, ``'fp16'``,
+            ``'int8'``, or ``'int4'``).
+        block_size: Block size for ``MatMulNBits`` weight-only quantization
+            (default ``128``; use ``32`` for browser WebGPU INT4).
+        max_abs_tol: Maximum allowed absolute difference vs PyTorch (defaults
+            to a mode-appropriate threshold when omitted).
+        min_cos_sim: Minimum allowed cosine similarity vs PyTorch (defaults to
+            a mode-appropriate threshold when omitted).
+        skip_existing: If True and the target ONNX file already exists, skip
+            export and run parity verification directly on the existing file.
 
     Returns:
         Manifest dictionary with file size, SHA-256, opset, and parity metrics.
     """
+    if quantize not in _DEFAULT_PARITY_THRESHOLDS:
+        raise ValueError(
+            f'Unsupported quantize mode {quantize!r}; expected one of {QUANTIZE_CHOICES}'
+        )
+    default_abs_tol, default_cos_sim = _DEFAULT_PARITY_THRESHOLDS[quantize]
+    resolved_abs_tol = default_abs_tol if max_abs_tol is None else max_abs_tol
+    resolved_cos_sim = default_cos_sim if min_cos_sim is None else min_cos_sim
+
     out_dir = staging_dir / spec.model_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    onnx_path = out_dir / 'model.onnx'
-    ext_data_path = out_dir / 'model.onnx.data'
+    onnx_filename = _quantized_filename(quantize, block_size)
+    onnx_path = out_dir / onnx_filename
+    ext_data_path = Path(f'{onnx_path}.data')
 
     encoder = spec.builder()
     encoder.eval()
@@ -880,6 +1193,7 @@ def export_model(
     ref_wrapper.eval()
     wrapper, adapted = _prepare_export_wrapper(encoder, temporal=spec.temporal)
 
+    quant_meta: dict[str, Any] | None = None
     if not (skip_existing and onnx_path.exists()):
         # Use dummy batch size > 1 so torch.export does not specialize dim 0 to 1.
         dummy_coords_np, dummy_years_np = make_test_batch(4)
@@ -899,28 +1213,61 @@ def export_model(
             input_names = ['coords']
             dynamic_shapes = {'coords': {0: batch_dim}}
 
-        if ext_data_path.exists():
-            ext_data_path.unlink()
+        fp32_path = onnx_path if quantize == 'none' else out_dir / '.tmp_fp32.onnx'
+        fp32_ext_path = Path(f'{fp32_path}.data')
+        for p in (ext_data_path, fp32_ext_path):
+            if p.exists():
+                p.unlink()
 
-        with torch.no_grad():
-            torch.onnx.export(
-                wrapper,
-                args,
-                str(onnx_path),
-                opset_version=opset,
-                input_names=input_names,
-                output_names=[_TEMP_OUTPUT_NAME],
-                dynamic_shapes=dynamic_shapes,
-                external_data=False,
-            )
+        try:
+            with torch.no_grad():
+                torch.onnx.export(
+                    wrapper,
+                    args,
+                    str(fp32_path),
+                    opset_version=opset,
+                    input_names=input_names,
+                    output_names=[_TEMP_OUTPUT_NAME],
+                    dynamic_shapes=dynamic_shapes,
+                    external_data=False,
+                )
 
-        proto = onnx.load(str(onnx_path), load_external_data=True)
-        _rename_graph_output_ssa_safe(proto, target_output_name='embedding')
-        onnx.save_model(proto, str(onnx_path), save_as_external_data=False)
-        if ext_data_path.exists():
-            ext_data_path.unlink()
-        del proto
-        gc.collect()
+            proto = onnx.load(str(fp32_path), load_external_data=True)
+            _rename_graph_output_ssa_safe(proto, target_output_name='embedding')
+            onnx.save_model(proto, str(fp32_path), save_as_external_data=False)
+            if fp32_ext_path.exists():
+                fp32_ext_path.unlink()
+
+            if quantize != 'none':
+                protected = _get_protected_linear_nodes(spec.model_id, proto)
+                del proto
+                gc.collect()
+                if quantize == 'fp16':
+                    _convert_hidden_gemm_to_fp16(fp32_path, onnx_path, protected)
+                    quant_meta = {'protected_nodes': sorted(protected)}
+                else:
+                    bits = 8 if quantize == 'int8' else 4
+                    nbits_meta = _quantize_matmul_nbits(
+                        fp32_path,
+                        onnx_path,
+                        protected,
+                        bits=bits,
+                        block_size=block_size,
+                    )
+                    quant_meta = {
+                        'bits': bits,
+                        'block_size': block_size,
+                        'protected_nodes': sorted(protected),
+                        **nbits_meta,
+                    }
+            else:
+                del proto
+                gc.collect()
+        finally:
+            if quantize != 'none':
+                for tmp in (fp32_path, fp32_ext_path):
+                    if tmp.exists():
+                        tmp.unlink()
 
     proto_meta = onnx.load(str(onnx_path), load_external_data=False)
     opsets = {imp.domain: imp.version for imp in proto_meta.opset_import}
@@ -931,8 +1278,8 @@ def export_model(
         onnx_path,
         wrapper,
         spec,
-        max_abs_tol=max_abs_tol,
-        min_cos_sim=min_cos_sim,
+        max_abs_tol=resolved_abs_tol,
+        min_cos_sim=resolved_cos_sim,
         reference_wrapper=ref_wrapper if adapted else None,
     )
 
@@ -942,14 +1289,18 @@ def export_model(
     del wrapper, ref_wrapper, encoder
     gc.collect()
 
-    return {
+    record: dict[str, Any] = {
         'model_id': spec.model_id,
         'path': str(onnx_path),
         'opset': actual_opset,
+        'quantize': quantize,
         'size_bytes': size_bytes,
         'sha256': digest,
         **parity,
     }
+    if quant_meta is not None:
+        record['quantization'] = quant_meta
+    return record
 
 
 def check_mind_onnx() -> dict[str, Any]:
@@ -1007,19 +1358,25 @@ def check_mind_onnx() -> dict[str, Any]:
 
 
 def upload_onnx_models(
-    staging_dir: Path, repo_id: str, model_ids: list[str], *, opset: int = DEFAULT_OPSET
+    staging_dir: Path,
+    repo_id: str,
+    model_ids: list[str],
+    *,
+    opset: int = DEFAULT_OPSET,
+    filename: str = 'model.onnx',
 ) -> tuple[str, dict[str, dict[str, Any]]]:
-    """Upload staged ``<model_id>/model.onnx`` files to Hugging Face Hub.
+    """Upload staged ``<model_id>/<filename>`` files to Hugging Face Hub.
 
-    Uses ``allow_patterns=['*/model.onnx']`` so no existing ``README.md``,
+    Uses ``allow_patterns=[f'*/{filename}']`` so no existing ``README.md``,
     ``model.safetensors``, ``config.json``, or concurrent model directories are
     modified.
 
     Args:
-        staging_dir: Directory containing ``<model_id>/model.onnx`` files.
+        staging_dir: Directory containing ``<model_id>/<filename>`` files.
         repo_id: Target Hugging Face Hub model repository.
         model_ids: List of expected model IDs to verify after upload.
         opset: ONNX opset version recorded in the Hub commit message.
+        filename: ONNX filename within each model directory.
 
     Returns:
         Tuple ``(commit_sha, remote_info)`` where ``remote_info`` maps each
@@ -1030,10 +1387,10 @@ def upload_onnx_models(
         repo_id=repo_id,
         repo_type='model',
         folder_path=str(staging_dir),
-        allow_patterns=['*/model.onnx'],
+        allow_patterns=[f'*/{filename}'],
         commit_message=(
-            f'Add dynamic-batch ONNX exports (opset {opset}) for '
-            f'{len(model_ids)} earthinr-zoo models'
+            f'Add dynamic-batch ONNX exports ({filename}, opset {opset}) for '
+            f'{len(model_ids)} models'
         ),
     )
     commit_sha = str(commit_info.oid)
@@ -1042,7 +1399,7 @@ def upload_onnx_models(
         repo_id=repo_id, repo_type='model', revision=commit_sha, recursive=True
     )
     remote_info: dict[str, dict[str, Any]] = {}
-    target_paths = {f'{mid}/model.onnx': mid for mid in model_ids}
+    target_paths = {f'{mid}/{filename}': mid for mid in model_ids}
     for entry in tree:
         if entry.path in target_paths:
             mid = target_paths[entry.path]
@@ -1061,14 +1418,17 @@ def main() -> None:
         '--staging-dir',
         type=Path,
         required=True,
-        help='Directory where <model_id>/model.onnx files and manifest are staged.',
+        help='Directory where <model_id>/<model*.onnx> files and manifest are staged.',
     )
     parser.add_argument(
         '--models',
         nargs='+',
         default=None,
         choices=list(MODEL_SPECS_BY_ID),
-        help='Subset of model IDs to export (defaults to all 26 zoo models).',
+        help=(
+            'Subset of model IDs to export (defaults to all 26 earthinr-zoo '
+            'models; pass "mind" to export MIND).'
+        ),
     )
     parser.add_argument(
         '--opset',
@@ -1077,21 +1437,46 @@ def main() -> None:
         help=f'Target ONNX opset version (default: {DEFAULT_OPSET}).',
     )
     parser.add_argument(
+        '--quantize',
+        choices=list(QUANTIZE_CHOICES),
+        default='none',
+        help=(
+            'Post-export quantization mode: "none" (FP32), "fp16" (hidden-only '
+            'mixed FP16), "int8" (weight-only MatMulNBits), or "int4" '
+            '(weight-only MatMulNBits). Default: none.'
+        ),
+    )
+    parser.add_argument(
+        '--block-size',
+        type=int,
+        default=DEFAULT_BLOCK_SIZE,
+        help=(
+            'Block size for int8/int4 MatMulNBits quantization (default: '
+            f'{DEFAULT_BLOCK_SIZE}; use 32 for browser WebGPU int4).'
+        ),
+    )
+    parser.add_argument(
         '--max-abs-tol',
         type=float,
-        default=DEFAULT_MAX_ABS_TOL,
-        help=f'Maximum allowed abs diff vs PyTorch (default: {DEFAULT_MAX_ABS_TOL}).',
+        default=None,
+        help=(
+            'Maximum allowed abs diff vs PyTorch (defaults to '
+            f'{DEFAULT_MAX_ABS_TOL} for none, relaxed for quantized modes).'
+        ),
     )
     parser.add_argument(
         '--min-cos-sim',
         type=float,
-        default=DEFAULT_MIN_COS_SIM,
-        help=f'Minimum allowed cosine similarity (default: {DEFAULT_MIN_COS_SIM}).',
+        default=None,
+        help=(
+            'Minimum allowed cosine similarity vs PyTorch (defaults to '
+            f'{DEFAULT_MIN_COS_SIM} for none, relaxed for quantized modes).'
+        ),
     )
     parser.add_argument(
         '--skip-existing',
         action='store_true',
-        help='Skip export if <model_id>/model.onnx already exists and only verify.',
+        help='Skip export if the target ONNX file already exists and only verify.',
     )
     parser.add_argument(
         '--check-mind',
@@ -1101,7 +1486,7 @@ def main() -> None:
     parser.add_argument(
         '--upload',
         action='store_true',
-        help='Upload staged */model.onnx files to Hugging Face Hub.',
+        help='Upload staged ONNX files to Hugging Face Hub.',
     )
     parser.add_argument(
         '--repo-id',
@@ -1110,19 +1495,33 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.block_size < 16 or args.block_size % 16 != 0:
+        parser.error('--block-size must be a positive multiple of 16 (e.g. 32 or 128).')
+
     staging_dir: Path = args.staging_dir
     staging_dir.mkdir(parents=True, exist_ok=True)
 
-    selected_ids = args.models if args.models is not None else list(MODEL_SPECS_BY_ID)
+    selected_ids = args.models if args.models is not None else list(ZOO_MODEL_IDS)
     records: list[dict[str, Any]] = []
 
     for model_id in selected_ids:
         spec = MODEL_SPECS_BY_ID[model_id]
-        print(f'Exporting & verifying {model_id} (opset {args.opset})...', flush=True)
+        quant_label = (
+            f'{args.quantize}, bs={args.block_size}'
+            if args.quantize in ('int8', 'int4')
+            else args.quantize
+        )
+        print(
+            f'Exporting & verifying {model_id} (opset {args.opset}, '
+            f'quantize={quant_label})...',
+            flush=True,
+        )
         rec = export_model(
             spec,
             staging_dir,
             opset=args.opset,
+            quantize=args.quantize,
+            block_size=args.block_size,
             max_abs_tol=args.max_abs_tol,
             min_cos_sim=args.min_cos_sim,
             skip_existing=args.skip_existing,
@@ -1156,19 +1555,25 @@ def main() -> None:
     manifest: dict[str, Any] = {
         'repo_id': args.repo_id,
         'opset': args.opset,
+        'quantize': args.quantize,
+        'block_size': args.block_size if args.quantize in ('int8', 'int4') else None,
         'models': records,
         'mind_check': mind_report,
     }
 
     if args.upload:
+        onnx_filename = _quantized_filename(args.quantize, args.block_size)
         print(
-            f'\nUploading {len(records)} ONNX models to {args.repo_id}...', flush=True
+            f'\nUploading {len(records)} ONNX models ({onnx_filename}) '
+            f'to {args.repo_id}...',
+            flush=True,
         )
         commit_sha, remote_info = upload_onnx_models(
             staging_dir,
             args.repo_id,
             [r['model_id'] for r in records],
             opset=args.opset,
+            filename=onnx_filename,
         )
         manifest['hub_commit_sha'] = commit_sha
         for rec in records:

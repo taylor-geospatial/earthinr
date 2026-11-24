@@ -197,6 +197,8 @@ Published benchmark results are tracked in [`results/coordbench_results.csv`](re
 
 Implicit spatial resolution measurements (half-sill distances and suggested sampling grid spacings across all 35 encoders) are documented in [`docs/IMPLICIT_RESOLUTION.md`](docs/IMPLICIT_RESOLUTION.md) and stored in [`results/implicit_resolution.csv`](results/implicit_resolution.csv).
 
+ONNX quantization benchmarks (FP32, mixed-FP16, weight-only INT8/INT4, and browser WebGPU compatibility across five representative encoders) are documented in [`docs/QUANTIZATION.md`](docs/QUANTIZATION.md).
+
 ## License
 
 EarthINR is released under the [MIT License](LICENSE). Copyright (c) Taylor Geospatial.
