@@ -191,6 +191,10 @@ earthinr coord --model kriging --methods kriging --datasets air_temp --split spa
 earthinr leaderboard results/coordbench.csv --method linear --split spatial
 ```
 
+## CoordBench Leaderboard
+
+Published benchmark results are tracked in [`results/coordbench_results.csv`](results/coordbench_results.csv) and can be explored interactively via [`docs/index.html`](docs/index.html) (serve locally with `python -m http.server` or open via GitHub Pages).
+
 ## License
 
 EarthINR is released under the [MIT License](LICENSE). Copyright (c) Taylor Geospatial.
