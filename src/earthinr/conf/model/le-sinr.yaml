@@ -1,5 +1,0 @@
-name: le-sinr
-target: earthinr.models.lesinr.LESINRLocationEncoder
-kwargs:
-  weights: DEFAULT
-description: LE-SINR language-enhanced species distribution location encoder (256-d).

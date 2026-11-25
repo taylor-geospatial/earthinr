@@ -1,5 +1,0 @@
-name: taxabind
-target: earthinr.models.rff_capsule.TaxaBindLocationEncoder
-kwargs:
-  weights: ECOGEO
-description: TaxaBind ecological multi-modal location encoder (512-d).

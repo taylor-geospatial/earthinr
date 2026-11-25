@@ -10,8 +10,8 @@ import huggingface_hub
 import pytest
 import torch
 
-from earthinr._errors import ConfigError
-from earthinr.models._utils import (
+from neuralftw._errors import ConfigError
+from neuralftw.models._utils import (
     equal_earth_projection,
     hf_download,
     load_json_config,

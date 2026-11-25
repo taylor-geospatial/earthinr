@@ -11,9 +11,9 @@ import numpy as np
 import pytest
 import torch
 
-import earthinr.models.onnx as onnx_mod
-from earthinr import DependencyNotFoundError
-from earthinr.models import (
+import neuralftw.models.onnx as onnx_mod
+from neuralftw import DependencyNotFoundError
+from neuralftw.models import (
     ONNX_PRESET_SPECS,
     ONNXLocationEncoder,
     list_models,
@@ -91,7 +91,7 @@ def test_onnx_preset_specs_match_zoo() -> None:
     for preset, spec in ONNX_PRESET_SPECS.items():
         repo_id, filename, embed_dim, accepts_year, default_year = spec
         assert preset in registered
-        assert repo_id == 'taylor-geospatial/earthinr-zoo'
+        assert repo_id == 'taylor-geospatial/neuralftw-zoo'
         assert filename.endswith('/model.onnx')
         assert embed_dim > 0
         assert accepts_year is (preset == 'terranova-st')
@@ -110,7 +110,7 @@ def test_missing_onnxruntime_raises_dependency_error(
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, '__import__', _blocked_import)
-    with pytest.raises(DependencyNotFoundError, match=r'earthinr\[onnx\]'):
+    with pytest.raises(DependencyNotFoundError, match=r'neuralftw\[onnx\]'):
         ONNXLocationEncoder(model_path='fake.onnx')
 
 
@@ -119,7 +119,7 @@ def test_invalid_arguments_raise_value_error(monkeypatch: pytest.MonkeyPatch) ->
     with pytest.raises(ValueError, match='model_path'):
         ONNXLocationEncoder()
     with pytest.raises(ValueError, match='model_path'):
-        ONNXLocationEncoder(repo_id='taylor-geospatial/earthinr-zoo')
+        ONNXLocationEncoder(repo_id='taylor-geospatial/neuralftw-zoo')
 
 
 def test_local_path_cpu_and_dynamic_batches(
@@ -167,12 +167,12 @@ def test_hf_download_cuda_and_explicit_providers(
     monkeypatch.setattr(torch.cuda, 'device_count', lambda: 1)
 
     enc_cuda = ONNXLocationEncoder(
-        repo_id='taylor-geospatial/earthinr-zoo',
+        repo_id='taylor-geospatial/neuralftw-zoo',
         filename='sinr/model.onnx',
         embed_dim=256,
         device='cuda',
     )
-    assert download_calls == [('taylor-geospatial/earthinr-zoo', 'sinr/model.onnx')]
+    assert download_calls == [('taylor-geospatial/neuralftw-zoo', 'sinr/model.onnx')]
     assert enc_cuda.embed_dim == 256
     assert enc_cuda.providers == ('CUDAExecutionProvider', 'CPUExecutionProvider')
     assert sessions[0].providers == ['CUDAExecutionProvider', 'CPUExecutionProvider']

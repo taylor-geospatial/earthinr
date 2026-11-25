@@ -1,0 +1,5 @@
+name: geoclosp
+target: neuralftw.models.geoclosp.GeoCLOSPLocationEncoder
+kwargs:
+  weights: RN50_L10
+description: GeoCLOSP-RN L10 spherical harmonic SirenNet + CLOSP multimodal projection location encoder (384-d).

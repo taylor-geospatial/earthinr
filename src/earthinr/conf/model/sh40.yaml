@@ -1,5 +1,0 @@
-name: sh40
-target: earthinr.models.encoders.AnalyticSphericalHarmonicLocationEncoder
-kwargs:
-  legendre_polys: 41
-description: High-order analytic spherical harmonics up to degree 40 (1681-d).

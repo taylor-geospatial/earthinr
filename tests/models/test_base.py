@@ -9,8 +9,8 @@ import torch
 from numpy.typing import NDArray
 from torch import Tensor
 
-import earthinr.models._base as base_mod
-from earthinr.models import LocationEncoder, Weights, WeightsEnum
+import neuralftw.models._base as base_mod
+from neuralftw.models import LocationEncoder, Weights, WeightsEnum
 
 
 class _DummyWeights(WeightsEnum):

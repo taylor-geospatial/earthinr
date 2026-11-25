@@ -8,7 +8,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.osmgraphclip import (
+from neuralftw.models.osmgraphclip import (
     OSMGraphCLIP_Weights,
     OSMGraphCLIPLocationEncoder,
     osmgraphclip,
@@ -119,7 +119,7 @@ class TestOSMGraphCLIPLocationEncoder:
         expected_ms: bool,
     ) -> None:
         w = OSMGraphCLIP_Weights.verify(member_name)
-        assert w.repo_id == 'taylor-geospatial/earthinr-zoo'
+        assert w.repo_id == 'taylor-geospatial/neuralftw-zoo'
         assert w.meta['legendre_polys'] == expected_l
         assert w.meta['multiscale'] is expected_ms
         assert w.meta['license'] == 'Apache-2.0'

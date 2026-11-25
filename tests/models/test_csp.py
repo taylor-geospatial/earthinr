@@ -9,7 +9,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.csp import (
+from neuralftw.models.csp import (
     CSP_Weights,
     CSPLocationEncoder,
     GridCellSpatialRelationEncoder,

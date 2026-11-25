@@ -6,8 +6,8 @@ from typing import Any, cast
 
 import pytest
 
-from earthinr._errors import ConfigError
-from earthinr.coordbench.config import (
+from neuralftw._errors import ConfigError
+from neuralftw.coordbench.config import (
     CoordConfig,
     CoordEvaluationConfig,
     CoordModelConfig,

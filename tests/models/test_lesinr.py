@@ -8,7 +8,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.lesinr import LESINR_Weights, LESINRLocationEncoder, lesinr
+from neuralftw.models.lesinr import LESINR_Weights, LESINRLocationEncoder, lesinr
 
 
 class TestLESINRLocationEncoder:
@@ -58,7 +58,7 @@ class TestLESINRLocationEncoder:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         w = LESINR_Weights.verify('DEFAULT')
-        assert w.repo_id == 'taylor-geospatial/earthinr-zoo'
+        assert w.repo_id == 'taylor-geospatial/neuralftw-zoo'
         assert w.filename == 'le-sinr/model.safetensors'
         assert w.meta['num_inputs'] == 4
         assert w.meta['num_filts'] == 256

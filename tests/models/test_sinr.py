@@ -9,7 +9,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.sinr import (
+from neuralftw.models.sinr import (
     ResLayer,
     SINR_Weights,
     SINRLocationEncoder,
@@ -58,7 +58,7 @@ class TestSINR:
         ref = SINRNet(num_inputs=4, num_filts=16, depth=2)
         ref.eval()
 
-        # Stripped checkpoint (earthinr-zoo layout)
+        # Stripped checkpoint (neuralftw-zoo layout)
         stripped_path = tmp_path / 'sinr_stripped.safetensors'
         safetensors.torch.save_file(ref.state_dict(), stripped_path)
         enc_stripped = SINRLocationEncoder(

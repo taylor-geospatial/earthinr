@@ -1,0 +1,5 @@
+name: gair
+target: neuralftw.models.rff_capsule.GAIRLocationEncoder
+kwargs:
+  weights: DEFAULT
+description: GAIR geo-aligned implicit representation location encoder (768-d).

@@ -1,5 +1,0 @@
-name: nerf
-target: earthinr.models.encoders.NeRFLocationEncoder
-kwargs:
-  num_frequencies: 16
-description: NeRF-style multi-frequency sinusoidal encoding on unit sphere (96-d).

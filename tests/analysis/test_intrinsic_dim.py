@@ -12,16 +12,16 @@ import pytest
 import torch
 from torch import Tensor
 
-import earthinr
-from earthinr import DependencyNotFoundError
-from earthinr.analysis import (
+import neuralftw
+from neuralftw import DependencyNotFoundError
+from neuralftw.analysis import (
     SUPPORTED_ESTIMATORS,
     analyze_intrinsic_dimension,
     estimate_intrinsic_dimension,
     generate_equal_area_grid,
     participation_ratio,
 )
-from earthinr.models import LocationEncoder, get_model
+from neuralftw.models import LocationEncoder, get_model
 
 
 class _RecordingEncoder(LocationEncoder):
@@ -368,5 +368,5 @@ class TestAnalyzeIntrinsicDimension:
 
 
 def test_top_level_exports() -> None:
-    assert earthinr.analysis.SUPPORTED_ESTIMATORS == SUPPORTED_ESTIMATORS
-    assert earthinr.analysis.participation_ratio is participation_ratio
+    assert neuralftw.analysis.SUPPORTED_ESTIMATORS == SUPPORTED_ESTIMATORS
+    assert neuralftw.analysis.participation_ratio is participation_ratio

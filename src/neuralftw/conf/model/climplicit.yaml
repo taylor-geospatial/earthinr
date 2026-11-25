@@ -1,0 +1,5 @@
+name: climplicit
+target: neuralftw.models.climplicit.ClimplicitLocationEncoder
+kwargs:
+  weights: CHELSA
+description: Climplicit CHELSA climate H-SIREN/ReSIREN location encoder (1024-d).

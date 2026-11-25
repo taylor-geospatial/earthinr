@@ -9,7 +9,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.hydroloc import (
+from neuralftw.models.hydroloc import (
     HydroLoc_Weights,
     HydroLocLocationEncoder,
     _normalize_hydroloc_state_dict,
@@ -77,7 +77,7 @@ class TestHydroLocLocationEncoder:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         w = HydroLoc_Weights.verify('DEFAULT')
-        assert w.repo_id == 'taylor-geospatial/earthinr-zoo'
+        assert w.repo_id == 'taylor-geospatial/neuralftw-zoo'
         assert w.filename == 'hydroloc/model.safetensors'
         assert w.meta['embed_dim'] == 512
         assert w.meta['depth'] == 4

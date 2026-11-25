@@ -8,7 +8,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.rff_capsule import (
+from neuralftw.models.rff_capsule import (
     EqualEarthRFFEncoder,
     GAIR_Weights,
     GAIRLocationEncoder,

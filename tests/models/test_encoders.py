@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 
-from earthinr.models.encoders import (
+from neuralftw.models.encoders import (
     AnalyticSphericalHarmonicLocationEncoder,
     FrequencyRFFLocationEncoder,
     NeRFLocationEncoder,

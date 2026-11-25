@@ -2,9 +2,9 @@
 # Copyright (c) Taylor Geospatial. All rights reserved.
 # Licensed under the MIT License.
 
-"""Export, quantize, and verify dynamic-batch ONNX models for EarthINR.
+"""Export, quantize, and verify dynamic-batch ONNX models for NeuralFTW.
 
-Exports all 26 location encoders hosted in ``taylor-geospatial/earthinr-zoo``
+Exports all 26 location encoders hosted in ``taylor-geospatial/neuralftw-zoo``
 (plus ``mind`` as ``(lon, lat) -> (B, 3072)``) to single-file, self-contained
 ONNX graphs (opset 18 by default) with dynamic batch dimension 0, optionally
 applies mixed-FP16 or weight-only INT8/INT4 ``MatMulNBits`` quantization while
@@ -40,16 +40,16 @@ from huggingface_hub import HfApi, hf_hub_download
 from onnx import TensorProto, helper, numpy_helper
 from torch import Tensor, nn
 
-from earthinr.models._base import LocationEncoder
-from earthinr.models.climplicit import Climplicit_Weights, climplicit
-from earthinr.models.csp import CSP_Weights, csp
-from earthinr.models.geoclosp import GeoCLOSP_Weights, geoclosp
-from earthinr.models.gtloc import GTLoc_Weights, gtloc
-from earthinr.models.hydroloc import HydroLoc_Weights, hydroloc
-from earthinr.models.lesinr import LESINR_Weights, lesinr
-from earthinr.models.mind import MIND_Weights, mind
-from earthinr.models.osmgraphclip import OSMGraphCLIP_Weights, osmgraphclip
-from earthinr.models.rff_capsule import (
+from neuralftw.models._base import LocationEncoder
+from neuralftw.models.climplicit import Climplicit_Weights, climplicit
+from neuralftw.models.csp import CSP_Weights, csp
+from neuralftw.models.geoclosp import GeoCLOSP_Weights, geoclosp
+from neuralftw.models.gtloc import GTLoc_Weights, gtloc
+from neuralftw.models.hydroloc import HydroLoc_Weights, hydroloc
+from neuralftw.models.lesinr import LESINR_Weights, lesinr
+from neuralftw.models.mind import MIND_Weights, mind
+from neuralftw.models.osmgraphclip import OSMGraphCLIP_Weights, osmgraphclip
+from neuralftw.models.rff_capsule import (
     GAIR_Weights,
     GeoCLIP_Weights,
     SLED_Weights,
@@ -59,17 +59,17 @@ from earthinr.models.rff_capsule import (
     sled,
     taxabind,
 )
-from earthinr.models.satclip import (
+from neuralftw.models.satclip import (
     POLE_LATITUDE_EPS_DEGREES,
     SatCLIP_Weights,
     StableAnalyticSphericalHarmonics,
     satclip,
 )
-from earthinr.models.sinr import SINR_Weights, sinr
-from earthinr.models.terranova import TerraNova_Weights, terranova
-from earthinr.models.tte import TTE_Weights, TTELocationEncoder, tte
+from neuralftw.models.sinr import SINR_Weights, sinr
+from neuralftw.models.terranova import TerraNova_Weights, terranova
+from neuralftw.models.tte import TTE_Weights, TTELocationEncoder, tte
 
-ZOO_REPO_ID = 'taylor-geospatial/earthinr-zoo'
+ZOO_REPO_ID = 'taylor-geospatial/neuralftw-zoo'
 MIND_REPO_ID = 'taylor-geospatial/MIND'
 DEFAULT_OPSET = 18
 DEFAULT_MAX_ABS_TOL = 1e-4
@@ -84,12 +84,12 @@ _DEFAULT_PARITY_THRESHOLDS: dict[str, tuple[float, float]] = {
     'int4': (15.0, 0.70),
 }
 TEST_BATCH_SIZES = (1, 7, 32)
-_TEMP_OUTPUT_NAME = '_earthinr_embedding_output'
+_TEMP_OUTPUT_NAME = '_neuralftw_embedding_output'
 
 
 @dataclass(frozen=True)
 class ModelSpec:
-    """Specification for an EarthINR model to export to ONNX."""
+    """Specification for an NeuralFTW model to export to ONNX."""
 
     model_id: str
     builder: Callable[[], LocationEncoder]
@@ -1149,7 +1149,7 @@ def export_model(
     min_cos_sim: float | None = None,
     skip_existing: bool = False,
 ) -> dict[str, Any]:
-    """Export one EarthINR location encoder to ONNX and verify parity.
+    """Export one NeuralFTW location encoder to ONNX and verify parity.
 
     Args:
         spec: Model specification to export.
@@ -1304,11 +1304,11 @@ def export_model(
 
 
 def check_mind_onnx() -> dict[str, Any]:
-    """Verify numerical parity between ``earthinr`` MIND and upstream ``mind.onnx``.
+    """Verify numerical parity between ``neuralftw`` MIND and upstream ``mind.onnx``.
 
     Note that ``taylor-geospatial/MIND/mind.onnx`` takes native ``(lat, lon)``
     input named ``latlon`` and outputs ``embedding`` of shape ``(B, 3072)``,
-    while ``earthinr`` accepts universal ``(lon, lat)`` coordinates and flips
+    while ``neuralftw`` accepts universal ``(lon, lat)`` coordinates and flips
     them internally.
 
     Returns:
@@ -1426,7 +1426,7 @@ def main() -> None:
         default=None,
         choices=list(MODEL_SPECS_BY_ID),
         help=(
-            'Subset of model IDs to export (defaults to all 26 earthinr-zoo '
+            'Subset of model IDs to export (defaults to all 26 neuralftw-zoo '
             'models; pass "mind" to export MIND).'
         ),
     )
@@ -1481,7 +1481,7 @@ def main() -> None:
     parser.add_argument(
         '--check-mind',
         action='store_true',
-        help='Also verify parity of earthinr MIND against taylor-geospatial/MIND.',
+        help='Also verify parity of neuralftw MIND against taylor-geospatial/MIND.',
     )
     parser.add_argument(
         '--upload',

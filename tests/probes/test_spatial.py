@@ -4,15 +4,15 @@
 import numpy as np
 import pytest
 
-from earthinr.probes import spatial as sp_mod
-from earthinr.probes.spatial import (
+from neuralftw.probes import spatial as sp_mod
+from neuralftw.probes.spatial import (
     _fit_variograms,
     _krige_weights,
     _select_kriging_model,
     idw_probe_score,
     kriging_probe_score,
 )
-from earthinr.probes.splits import spatial_fold_ids
+from neuralftw.probes.splits import spatial_fold_ids
 
 
 def _make_spatial_data(

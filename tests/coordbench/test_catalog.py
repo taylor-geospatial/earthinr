@@ -4,7 +4,7 @@
 import subprocess
 import sys
 
-from earthinr.coordbench.catalog import (
+from neuralftw.coordbench.catalog import (
     ALL_FAMILIES,
     CDC_PLACES_MEASURES,
     COORDBENCH_REPO,
@@ -78,19 +78,19 @@ class BlockHeavy(importlib.abc.MetaPathFinder):
 
 sys.meta_path.insert(0, BlockHeavy())
 
-# Stub parent packages so we isolate catalog/taxonomy/config from earthinr.__init__.
-src_root = os.path.abspath('src/earthinr')
+# Stub parent packages so we isolate catalog/taxonomy/config from neuralftw.__init__.
+src_root = os.path.abspath('src/neuralftw')
 for pkg_name, pkg_path in (
-    ('earthinr', src_root),
-    ('earthinr.coordbench', os.path.join(src_root, 'coordbench')),
+    ('neuralftw', src_root),
+    ('neuralftw.coordbench', os.path.join(src_root, 'coordbench')),
 ):
     pkg = types.ModuleType(pkg_name)
     pkg.__path__ = [pkg_path]
     sys.modules[pkg_name] = pkg
 
-import earthinr.coordbench.catalog as cat
-import earthinr.coordbench.config as cfg
-import earthinr.coordbench.taxonomy as tax
+import neuralftw.coordbench.catalog as cat
+import neuralftw.coordbench.config as cfg
+import neuralftw.coordbench.taxonomy as tax
 
 assert len(cat.list_benchmarks()) == 60
 assert tax.family_of('pdfm-conus27') == 'socio'

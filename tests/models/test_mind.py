@@ -9,7 +9,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.mind import (
+from neuralftw.models.mind import (
     MIND_Weights,
     MINDLocationEncoder,
     ReSIRENLocationEncoder,
@@ -179,7 +179,7 @@ class TestMINDLocationEncoder:
 
         # Default untrained fallback (use tiny dims via monkeypatch to stay fast)
         monkeypatch.setattr(
-            'earthinr.models.mind.ReSIRENLocationEncoder',
+            'neuralftw.models.mind.ReSIRENLocationEncoder',
             lambda: ReSIRENLocationEncoder(embed_dim=8, out_dim=4, depth=1),
         )
         enc_default = MINDLocationEncoder()

@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from earthinr._errors import DatasetNotFoundError
-from earthinr.coordbench.catalog import (
+from neuralftw._errors import DatasetNotFoundError
+from neuralftw.coordbench.catalog import (
     CDC_PLACES_MEASURES,
     COORDBENCH_REPO,
     DEEPMIND_EVAL_CONFIGS,
@@ -17,7 +17,7 @@ from earthinr.coordbench.catalog import (
     USAVARS_LABELS,
     USAVARS_LOG_LABELS,
 )
-from earthinr.coordbench.datasets import (
+from neuralftw.coordbench.datasets import (
     CoordBenchmark,
     load_air_temp,
     load_benchmarks,

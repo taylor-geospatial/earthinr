@@ -1,5 +1,0 @@
-name: tte
-target: earthinr.models.tte.TTELocationEncoder
-kwargs:
-  weights: DEFAULT
-description: TTE Voronoi semantic-register location encoder (512-d).

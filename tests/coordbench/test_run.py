@@ -8,23 +8,23 @@ from typing import Any
 import numpy as np
 import pytest
 
-from earthinr import ConfigError
-from earthinr.coordbench import run as run_mod
-from earthinr.coordbench.config import (
+from neuralftw import ConfigError
+from neuralftw.coordbench import run as run_mod
+from neuralftw.coordbench.config import (
     CoordConfig,
     CoordEvaluationConfig,
     CoordModelConfig,
     CoordOutputConfig,
     CoordRuntimeConfig,
 )
-from earthinr.coordbench.datasets import CoordBenchmark
-from earthinr.coordbench.run import (
+from neuralftw.coordbench.datasets import CoordBenchmark
+from neuralftw.coordbench.run import (
     CSV_COLUMNS,
     CoordResult,
     append_rows_atomic,
     run_coordbench,
 )
-from earthinr.models.encoders import SinCosLocationEncoder, XYZLocationEncoder
+from neuralftw.models.encoders import SinCosLocationEncoder, XYZLocationEncoder
 
 
 def _make_reg_bench(
@@ -135,7 +135,7 @@ class TestCoordResultAndAtomicCSV:
             n_test=100,
             seed=0,
             model_name='sincos',
-            model_target='earthinr.models.encoders.SinCosLocationEncoder',
+            model_target='neuralftw.models.encoders.SinCosLocationEncoder',
             fold_algorithm='torch-randperm-v1',
         )
         row = res.to_row()
@@ -176,7 +176,7 @@ class TestCoordResultAndAtomicCSV:
         monkeypatch.setattr(run_mod.os, 'replace', _boom)
         with pytest.raises(OSError, match='disk full'):
             run_mod._write_csv_atomic(str(tmp_path / 'fail.csv'), ['x'], [{'x': 1}])
-        assert not list(tmp_path.glob('.earthinr_*.tmp'))
+        assert not list(tmp_path.glob('.neuralftw_*.tmp'))
 
         # If temp file was already removed before exception, unlink branch is skipped
         def _unlink_and_boom(src: str, dst: str) -> None:
@@ -335,7 +335,7 @@ class TestRunCoordBench:
         )
         res_idw = run_coordbench(cfg_idw)
         assert len(res_idw) == 2
-        assert res_idw[0].model_target == 'earthinr.probes.spatial.idw_probe_score'
+        assert res_idw[0].model_target == 'neuralftw.probes.spatial.idw_probe_score'
 
         # Spatial baseline paired with feature method raises ConfigError
         cfg_bad = CoordConfig(
