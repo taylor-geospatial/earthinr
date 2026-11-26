@@ -1,7 +1,7 @@
 # Copyright (c) Taylor Geospatial. All rights reserved.
 # Licensed under the MIT License.
 
-import builtins
+import importlib
 import math
 import sys
 from types import ModuleType
@@ -44,15 +44,9 @@ class _RecordingEncoder(LocationEncoder):
         return torch.cat([torch.sin(rad), torch.cos(rad)], dim=-1)
 
 
-def _install_fake_torchid(
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    with_primitives: bool = True,
-    with_submod_knn: bool = True,
-) -> dict[str, Any]:
+def _install_fake_torchid(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Install a lightweight fake ``torchid`` module in ``sys.modules``."""
     state: dict[str, Any] = {
-        'knn_torch_calls': 0,
         'seen_dtypes': [],
         'seen_shapes': [],
         'fit_kwargs': {},
@@ -62,47 +56,7 @@ def _install_fake_torchid(
     fake_torchid: Any = ModuleType('torchid')
     fake_estimators: Any = ModuleType('torchid.estimators')
 
-    def _orig_knn(
-        x: Tensor,
-        k: int,
-        *,
-        chunk: int = 4096,
-        include_self: bool = False,
-        Y: Tensor | None = None,  # noqa: N803
-    ) -> tuple[Tensor, Tensor]:
-        raise AssertionError('float32 default knn should have been patched')
-
-    def _knn_torch(
-        x: Tensor,
-        k: int,
-        *,
-        Y: Tensor | None = None,  # noqa: N803
-        include_self: bool = False,
-        chunk: int = 4096,
-    ) -> tuple[Tensor, Tensor]:
-        state['knn_torch_calls'] += 1
-        dists = torch.ones((x.shape[0], k), dtype=x.dtype, device=x.device)
-        idx = torch.zeros((x.shape[0], k), dtype=torch.long, device=x.device)
-        return dists, idx
-
-    if with_primitives:
-        fake_primitives: Any = ModuleType('torchid.primitives')
-        fake_primitives.knn = _orig_knn
-        fake_primitives._knn_torch = _knn_torch
-        fake_torchid.primitives = fake_primitives
-        state['primitives'] = fake_primitives
-        state['orig_knn'] = _orig_knn
-
-        for sub_name in ('mle', 'mom', 'tle', 'twonn'):
-            submod: Any = ModuleType(f'torchid.estimators.{sub_name}')
-            if with_submod_knn:
-                submod.knn = _orig_knn
-            setattr(fake_estimators, sub_name, submod)
-        state['submods'] = {
-            n: getattr(fake_estimators, n) for n in ('mle', 'mom', 'tle', 'twonn')
-        }
-
-    def _make_estimator(label: str, score: float, use_knn: bool) -> type[Any]:
+    def _make_estimator(label: str, score: float) -> type[Any]:
         class _FakeEstimator:
             def __init__(self, **kwargs: Any) -> None:
                 state['init_kwargs'][label] = kwargs
@@ -112,18 +66,16 @@ def _install_fake_torchid(
                 state['seen_dtypes'].append(x.dtype)
                 state['seen_shapes'].append(tuple(x.shape))
                 state['fit_kwargs'][label] = kwargs
-                if use_knn and with_primitives:
-                    fake_torchid.primitives.knn(x, 2)
                 self.dimension_ = score
                 return self
 
         return _FakeEstimator
 
-    fake_estimators.MLE = _make_estimator('mle', 3.1, True)
-    fake_estimators.TwoNN = _make_estimator('twonn', 2.4, True)
-    fake_estimators.MOM = _make_estimator('mom', 2.9, True)
-    fake_estimators.TLE = _make_estimator('tle', 3.3, True)
-    fake_estimators.FisherS = _make_estimator('fishers', 4.2, False)
+    fake_estimators.MLE = _make_estimator('mle', 3.1)
+    fake_estimators.TwoNN = _make_estimator('twonn', 2.4)
+    fake_estimators.MOM = _make_estimator('mom', 2.9)
+    fake_estimators.TLE = _make_estimator('tle', 3.3)
+    fake_estimators.FisherS = _make_estimator('fishers', 4.2)
 
     fake_torchid.estimators = fake_estimators
     monkeypatch.setitem(sys.modules, 'torchid', fake_torchid)
@@ -248,22 +200,22 @@ class TestEstimateIntrinsicDimension:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delitem(sys.modules, 'torchid', raising=False)
-        real_import = builtins.__import__
+        real_import = importlib.import_module
 
-        def _block_torchid(name: str, *args: Any, **kwargs: Any) -> Any:
+        def _block_torchid(name: str, package: str | None = None) -> Any:
             if name == 'torchid' or name.startswith('torchid.'):
                 raise ModuleNotFoundError("No module named 'torchid'")
-            return real_import(name, *args, **kwargs)
+            return real_import(name, package)
 
-        monkeypatch.setattr(builtins, '__import__', _block_torchid)
+        monkeypatch.setattr(importlib, 'import_module', _block_torchid)
         emb = np.arange(100, dtype=np.float64).reshape(50, 2)
         with pytest.raises(DependencyNotFoundError, match='torchid'):
             estimate_intrinsic_dimension(emb, estimators=('twonn',))
 
-    def test_all_estimators_and_exact_knn_patch_restore(
+    def test_all_estimators_and_deduplication(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        state = _install_fake_torchid(monkeypatch, with_primitives=True)
+        state = _install_fake_torchid(monkeypatch)
         rng = np.random.default_rng(1)
         base = rng.standard_normal((30, 6))
         # Include 2 exact duplicate rows to verify deduplication.
@@ -288,21 +240,13 @@ class TestEstimateIntrinsicDimension:
         # All tensors passed to torchid were float64 and deduplicated to 30 rows.
         assert all(dt == torch.float64 for dt in state['seen_dtypes'])
         assert all(shape == (30, 6) for shape in state['seen_shapes'])
-        assert state['knn_torch_calls'] == 4
         assert state['fit_kwargs']['mle'] == {'n_neighbors': 10}
         assert state['init_kwargs']['mom'] == {'n_neighbors': 10}
         assert state['init_kwargs']['tle'] == {'n_neighbors': 10}
         assert state['init_kwargs']['fishers'] == {'conditional_number': 15.0}
 
-        # Context manager restored original knn on primitives and submodules.
-        assert state['primitives'].knn is state['orig_knn']
-        for submod in state['submods'].values():
-            assert submod.knn is state['orig_knn']
-
-    def test_without_primitives_and_without_deduplication(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        state = _install_fake_torchid(monkeypatch, with_primitives=False)
+    def test_without_deduplication(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        state = _install_fake_torchid(monkeypatch)
         base = np.arange(20, dtype=np.float64).reshape(10, 2)
         emb = np.vstack([base, base[:2]])
         out = estimate_intrinsic_dimension(
@@ -310,18 +254,6 @@ class TestEstimateIntrinsicDimension:
         )
         assert out['twonn'] == pytest.approx(2.4)
         assert state['seen_shapes'] == [(12, 2)]
-
-    def test_submodules_without_knn_attr_skipped_cleanly(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        state = _install_fake_torchid(
-            monkeypatch, with_primitives=True, with_submod_knn=False
-        )
-        emb = np.arange(20, dtype=np.float64).reshape(10, 2)
-        out = estimate_intrinsic_dimension(emb, estimators=('twonn',))
-        assert out['twonn'] == pytest.approx(2.4)
-        assert state['knn_torch_calls'] == 1
-        assert state['primitives'].knn is state['orig_knn']
 
     def test_validation_errors(self) -> None:
         emb = np.arange(20, dtype=np.float64).reshape(10, 2)
@@ -342,7 +274,7 @@ class TestAnalyzeIntrinsicDimension:
     def test_encodes_and_forwards_temporal_inputs(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _install_fake_torchid(monkeypatch, with_primitives=True)
+        _install_fake_torchid(monkeypatch)
         lon, lat = generate_equal_area_grid(2500.0)
         year = np.full(lon.shape[0], 2020.0)
         month = np.full(lon.shape[0], 6.0)

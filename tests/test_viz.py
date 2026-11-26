@@ -1,7 +1,7 @@
 # Copyright (c) Taylor Geospatial. All rights reserved.
 # Licensed under the MIT License.
 
-import builtins
+import importlib
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -250,15 +250,15 @@ class TestEmbeddingsToRgbAndPlot:
         # Missing matplotlib raises DependencyNotFoundError
         monkeypatch.delitem(sys.modules, 'matplotlib', raising=False)
         monkeypatch.delitem(sys.modules, 'matplotlib.pyplot', raising=False)
-        real_import = builtins.__import__
+        real_import = importlib.import_module
 
-        def _block_mpl(name: str, *args: Any, **kwargs: Any) -> Any:
+        def _block_mpl(name: str, package: str | None = None) -> Any:
             if name == 'matplotlib' or name.startswith('matplotlib.'):
                 raise ModuleNotFoundError("No module named 'matplotlib'")
-            return real_import(name, *args, **kwargs)
+            return real_import(name, package)
 
-        monkeypatch.setattr(builtins, '__import__', _block_mpl)
-        with pytest.raises(DependencyNotFoundError, match=r'neuralftw\[viz\]'):
+        monkeypatch.setattr(importlib, 'import_module', _block_mpl)
+        with pytest.raises(DependencyNotFoundError, match='matplotlib'):
             plot_embedding_map(lon, lat, emb)
 
     def test_top_level_viz_exports(self) -> None:

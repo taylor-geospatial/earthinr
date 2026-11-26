@@ -134,10 +134,6 @@ class ONNXLocationEncoder(LocationEncoder):
     Runs self-contained dynamic-batch ``.onnx`` graphs through
     ``onnxruntime.InferenceSession`` while preserving the full
     :class:`LocationEncoder` interface.
-
-    .. note::
-
-       Requires the ``onnx`` extra (``pip install neuralftw[onnx]``).
     """
 
     name: str = 'onnx'
@@ -184,7 +180,7 @@ class ONNXLocationEncoder(LocationEncoder):
                 are provided, or if *slice_dim* is not positive.
         """
         super().__init__(device=device, batch_size=batch_size)
-        ort = lazy_import('onnxruntime', extra='onnx')
+        ort = lazy_import('onnxruntime')
 
         if slice_dim is not None and (
             isinstance(slice_dim, bool)

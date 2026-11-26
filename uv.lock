@@ -5,9 +5,12 @@ resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
     "python_full_version >= '3.14' and sys_platform == 'emscripten'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version < '3.14' and sys_platform == 'win32'",
-    "python_full_version < '3.14' and sys_platform == 'emscripten'",
-    "python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32'",
+    "python_full_version < '3.13' and sys_platform == 'win32'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten'",
+    "python_full_version < '3.13' and sys_platform == 'emscripten'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
 [[package]]
@@ -1164,6 +1167,19 @@ wheels = [
 ]
 
 [[package]]
+name = "lightning-utilities"
+version = "0.15.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f1/45/7fa8f56b17dc0f0a41ec70dd307ecd6787254483549843bef4c30ab5adce/lightning_utilities-0.15.3.tar.gz", hash = "sha256:792ae0204c79f6859721ac7f386c237a33b0ed06ba775009cb894e010a842033", size = 33553, upload-time = "2026-02-22T14:48:53.348Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/25/f4/ead6e0e37209b07c9baa3e984ccdb0348ca370b77cea3aaea8ddbb097e00/lightning_utilities-0.15.3-py3-none-any.whl", hash = "sha256:6c55f1bee70084a1cbeaa41ada96e4b3a0fea5909e844dd335bd80f5a73c5f91", size = 31906, upload-time = "2026-02-22T14:48:52.488Z" },
+]
+
+[[package]]
 name = "markupsafe"
 version = "3.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1579,7 +1595,9 @@ dependencies = [
     { name = "filelock" },
     { name = "huggingface-hub" },
     { name = "lazy-loader" },
+    { name = "matplotlib" },
     { name = "numpy" },
+    { name = "onnxruntime" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pyyaml" },
@@ -1587,13 +1605,12 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "torch" },
+    { name = "torchid", marker = "python_full_version >= '3.13'" },
 ]
 
 [package.optional-dependencies]
 all = [
-    { name = "matplotlib" },
     { name = "numcodecs" },
-    { name = "onnxruntime" },
     { name = "pyproj" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -1603,9 +1620,6 @@ all = [
     { name = "s3fs" },
     { name = "ty" },
     { name = "zarr" },
-]
-onnx = [
-    { name = "onnxruntime" },
 ]
 products = [
     { name = "numcodecs" },
@@ -1623,20 +1637,17 @@ tests = [
     { name = "pytest-cov" },
     { name = "pytest-socket" },
 ]
-viz = [
-    { name = "matplotlib" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "filelock", specifier = ">=3.13" },
     { name = "huggingface-hub", specifier = ">=0.23" },
     { name = "lazy-loader", specifier = ">=0.4" },
-    { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.8" },
-    { name = "neuralftw", extras = ["products", "onnx", "viz", "style", "tests"], marker = "extra == 'all'" },
+    { name = "matplotlib", specifier = ">=3.8" },
+    { name = "neuralftw", extras = ["products", "style", "tests"], marker = "extra == 'all'" },
     { name = "numcodecs", marker = "extra == 'products'", specifier = ">=0.13" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "onnxruntime", marker = "extra == 'onnx'", specifier = ">=1.18" },
+    { name = "onnxruntime", specifier = ">=1.18" },
     { name = "pandas", specifier = ">=2.1" },
     { name = "pyarrow", specifier = ">=15" },
     { name = "pyproj", marker = "extra == 'products'", specifier = ">=3.6" },
@@ -1651,10 +1662,11 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1.4" },
     { name = "scipy", specifier = ">=1.11" },
     { name = "torch", specifier = ">=2.2" },
+    { name = "torchid", marker = "python_full_version >= '3.13'", specifier = ">=0.6.0" },
     { name = "ty", marker = "extra == 'style'", specifier = ">=0.0.1a23" },
     { name = "zarr", marker = "extra == 'products'", specifier = ">=3" },
 ]
-provides-extras = ["products", "onnx", "viz", "style", "tests", "all"]
+provides-extras = ["products", "style", "tests", "all"]
 
 [[package]]
 name = "numcodecs"
@@ -2765,6 +2777,36 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/22/6a/6425a3e8e3c9b251c1a1994295eaa2fbbb7211255e2b55f26d3eebae31ae/torch-2.15.0-cp315-cp315t-manylinux_2_28_aarch64.whl", hash = "sha256:ed708117f2f0162dbbd958dbd2654c16c99ad4c8ac14ccc4617dc76f029b8a8d", size = 482878055, upload-time = "2026-10-28T15:20:49.213Z" },
     { url = "https://files.pythonhosted.org/packages/7f/a8/dec4f9c0e4c1c9403294a62d5647fc5e46d23348bbd25f8ff143e57364cd/torch-2.15.0-cp315-cp315t-manylinux_2_28_x86_64.whl", hash = "sha256:9024cbf347dce95759bcde1411ef59b7cdb9ef0a846f4f24f356a17f8cf16f7d", size = 538397035, upload-time = "2026-10-28T15:21:05.11Z" },
     { url = "https://files.pythonhosted.org/packages/7b/64/1ad0107cec15706e4d972fcbfaa6b3da26734959109861a60902c922b50c/torch-2.15.0-cp315-cp315t-win_amd64.whl", hash = "sha256:c521a00891e92aba2f34717671c268acd0bde26444623efcceaeaf51c87b3b36", size = 127024483, upload-time = "2026-10-28T15:20:23.183Z" },
+]
+
+[[package]]
+name = "torchid"
+version = "0.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "torch" },
+    { name = "torchmetrics" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f0/c2/11e968b688958922b325f1a00d2ebf51eb6cc8d4a1eaf59c9d9448fa088e/torchid-0.6.0.tar.gz", hash = "sha256:6943721ce98d03420a6663b4107895d7a1e7c46adcc53c2d942d8c914ab12816", size = 32729, upload-time = "2026-11-25T00:13:29.469Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/38/2a9aa048d51344e2453516a42c773d8468199161dff9cc4d28a4ed19734f/torchid-0.6.0-py3-none-any.whl", hash = "sha256:cb9d49f45074e3658eec3928a1b4b440e89ea5bbe6782e3621f6cd95009e24fa", size = 40138, upload-time = "2026-11-25T00:13:28.614Z" },
+]
+
+[[package]]
+name = "torchmetrics"
+version = "1.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "lightning-utilities" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/81/34/39b8b749333db56c0585d7a11fa62a283c087bb1dfc897d69fb8cedbefb1/torchmetrics-1.9.0.tar.gz", hash = "sha256:a488609948600df52d3db4fcdab02e62aab2a85ef34da67037dc3e65b8512faa", size = 581765, upload-time = "2026-03-09T17:41:22.443Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/a2/c7f6ebf546f8f644edf0f999aa98ece106986a77a7b922316bf6414ff825/torchmetrics-1.9.0-py3-none-any.whl", hash = "sha256:bfdcbff3dd1d96b3374bb2496eb39f23c4b28b8a845b6a18c313688e0d2d9ca1", size = 983384, upload-time = "2026-03-09T17:41:19.756Z" },
 ]
 
 [[package]]

@@ -19,18 +19,14 @@ Every encoder in NeuralFTW implements a single `torch.nn.Module` contract (`Loca
 pip install neuralftw
 ```
 
-Optional extras:
+Optional extra (only needed for streaming cloud Zarr embedding products):
 
 ```bash
 # AlphaEarth & TESSERA Zarr embedding products (zarr, s3fs, pyproj, requests, numcodecs)
 pip install 'neuralftw[products]'
-
-# ONNX Runtime inference backend for neuralftw-zoo models (FP32, FP16, INT8, INT4)
-pip install 'neuralftw[onnx]'
-
-# Matplotlib plotting helper (plot_embedding_map)
-pip install 'neuralftw[viz]'
 ```
+
+`onnxruntime`, `matplotlib`, and `torchid>=0.6.0` (Python 3.13+, pure PyTorch with no FAISS) are included by default.
 
 ## Universal Input/Output Contract
 
@@ -110,14 +106,14 @@ lat = np.array([37.7749, 47.3769])
 year = np.array([2021, 2023])
 features = encoder.encode(lon, lat, year=year)  # shape: (2, 64), dtype: float32
 
-# 3. Optional ONNX Runtime backend with quantized weights (pip install 'neuralftw[onnx]')
+# 3. ONNX Runtime backend with quantized weights (FP32, FP16, INT8, INT4)
 onnx_enc = neuralftw.get_model('geoclip', backend='onnx', precision='int8')
 onnx_features = onnx_enc.encode(lon, lat)  # shape: (2, 512), dtype: float32
 ```
 
 ### Grid Inference & Plotting
 
-Generate a regular `(lon, lat)` grid, run batched inference, and project embeddings to RGB (requires `pip install 'neuralftw[viz]'` for `plot_embedding_map`):
+Generate a regular `(lon, lat)` grid, run batched inference, and project embeddings to RGB:
 
 ```python
 import neuralftw

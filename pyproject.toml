@@ -42,8 +42,12 @@ dependencies = [
     "huggingface-hub>=0.23",
     # lazy-loader 0.4+ required for attach_stub deferred subpackage imports
     "lazy-loader>=0.4",
+    # matplotlib 3.8+ required for embedding map plotting helper
+    "matplotlib>=3.8",
     # numpy 1.26+ required for modern Generator API and Python 3.12+ wheels
     "numpy>=1.26",
+    # onnxruntime 1.18+ required for ONNX Runtime inference backend
+    "onnxruntime>=1.18",
     # pandas 2.1+ required for PyArrow-backed parquet benchmark tables
     "pandas>=2.1",
     # pyarrow 15+ required for reading CoordBench and bundled GeoNames parquet files
@@ -58,6 +62,8 @@ dependencies = [
     "scipy>=1.11",
     # torch 2.2+ required for Python 3.12+ wheels and stable inference_mode/linalg APIs
     "torch>=2.2",
+    # torchid 0.6.0+ required for pure-PyTorch intrinsic dimension estimators (Python 3.13+)
+    "torchid>=0.6.0; python_version >= '3.13'",
 ]
 
 [project.urls]
@@ -81,14 +87,6 @@ products = [
     # zarr 3+ required for AlphaEarth and TESSERA v1.1 Zarr embedding stores
     "zarr>=3",
 ]
-onnx = [
-    # onnxruntime 1.18+ required for ONNX Runtime inference backend
-    "onnxruntime>=1.18",
-]
-viz = [
-    # matplotlib 3.8+ required for embedding map plotting helper
-    "matplotlib>=3.8",
-]
 style = [
     # ruff 0.14+ required for CPY copyright checks and modern Python 3.12 lint rules
     "ruff>=0.14",
@@ -104,7 +102,7 @@ tests = [
     "pytest-socket>=0.7",
 ]
 all = [
-    "neuralftw[products,onnx,viz,style,tests]",
+    "neuralftw[products,style,tests]",
 ]
 
 [project.scripts]

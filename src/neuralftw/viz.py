@@ -247,10 +247,6 @@ def plot_embedding_map(
 ) -> tuple[Any, Any]:
     """Plot a PCA RGB map of gridded location embeddings with Matplotlib.
 
-    .. note::
-
-       Requires the optional ``viz`` extra (``pip install neuralftw[viz]``).
-
     Args:
         lon: 2D longitude grid of shape ``(H, W)`` from :func:`make_coord_grid`
             or :func:`encode_grid`.
@@ -270,7 +266,7 @@ def plot_embedding_map(
         DependencyNotFoundError: If ``matplotlib`` is not installed.
         ValueError: If *lon*, *lat*, and *embeddings* shapes do not match.
     """
-    plt = lazy_import('matplotlib.pyplot', extra='viz')
+    plt = lazy_import('matplotlib.pyplot')
 
     lon_arr = np.asarray(lon, dtype=np.float64)
     lat_arr = np.asarray(lat, dtype=np.float64)

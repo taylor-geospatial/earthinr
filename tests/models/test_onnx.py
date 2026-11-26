@@ -1,7 +1,7 @@
 # Copyright (c) Taylor Geospatial. All rights reserved.
 # Licensed under the MIT License.
 
-import builtins
+import importlib
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -107,15 +107,15 @@ def test_missing_onnxruntime_raises_dependency_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delitem(sys.modules, 'onnxruntime', raising=False)
-    real_import = builtins.__import__
+    real_import = importlib.import_module
 
-    def _blocked_import(name: str, *args: Any, **kwargs: Any) -> Any:
+    def _blocked_import(name: str, package: str | None = None) -> Any:
         if name == 'onnxruntime':
             raise ModuleNotFoundError("No module named 'onnxruntime'")
-        return real_import(name, *args, **kwargs)
+        return real_import(name, package)
 
-    monkeypatch.setattr(builtins, '__import__', _blocked_import)
-    with pytest.raises(DependencyNotFoundError, match=r'neuralftw\[onnx\]'):
+    monkeypatch.setattr(importlib, 'import_module', _blocked_import)
+    with pytest.raises(DependencyNotFoundError, match='onnxruntime'):
         ONNXLocationEncoder(model_path='fake.onnx')
 
 
