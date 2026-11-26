@@ -12,7 +12,13 @@ from ._errors import (
 )
 from .models._base import LocationEncoder
 from .models.registry import get_model, list_models, register_model, unregister_model
-from .viz import embeddings_to_rgb, encode_grid, make_coord_grid, plot_embedding_map
+from .viz import (
+    embeddings_to_rgb,
+    encode_grid,
+    make_coord_grid,
+    make_land_mask,
+    plot_embedding_map,
+)
 
 __version__: str
 
@@ -31,6 +37,7 @@ __all__: tuple[str, ...] = (
     'get_model',
     'list_models',
     'make_coord_grid',
+    'make_land_mask',
     'models',
     'plot_embedding_map',
     'probes',

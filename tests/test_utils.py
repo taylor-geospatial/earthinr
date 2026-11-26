@@ -20,7 +20,7 @@ from neuralftw.cli import main
 class TestPackage:
     def test_version_and_exports(self) -> None:
         assert isinstance(neuralftw.__version__, str)
-        assert neuralftw.__version__ == '0.1.0'
+        assert neuralftw.__version__ == '0.1.1'
         assert hasattr(neuralftw, 'models')
         assert hasattr(neuralftw, 'probes')
         assert hasattr(neuralftw, 'coordbench')

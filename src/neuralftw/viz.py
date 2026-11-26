@@ -3,6 +3,8 @@
 
 """Coordinate grid generation, batched grid inference, and RGB map plotting."""
 
+import functools
+import importlib.resources
 import os
 from collections.abc import Sequence
 from typing import Any
@@ -14,6 +16,63 @@ from ._types import Path
 from ._utils import lazy_import
 from .models._base import LocationEncoder
 from .models.registry import get_model
+
+
+@functools.lru_cache(maxsize=1)
+def _load_land_mask_grid() -> NDArray[np.bool_]:
+    """Load the bundled 0.1° global bit-packed land mask as a 2D boolean array."""
+    res = importlib.resources.files('neuralftw.data').joinpath('land_mask.npz')
+    with importlib.resources.as_file(res) as path, np.load(path) as data:
+        packed = data['packed']
+        n_lat, n_lon = (int(v) for v in data['shape'])
+    return np.unpackbits(packed, axis=1)[:n_lat, :n_lon].astype(np.bool_, copy=False)
+
+
+def make_land_mask(
+    lon: NDArray[np.floating[Any]],
+    lat: NDArray[np.floating[Any]],
+    *,
+    include_antarctica: bool = False,
+) -> NDArray[np.bool_]:
+    """Look up a global land mask for WGS84 ``(lon, lat)`` coordinates.
+
+    Uses a bundled 0.1° (~11 km) bit-packed land mask derived from GLOBE with
+    zero external GIS dependencies.
+
+    Args:
+        lon: Longitude array in WGS84 degrees.
+        lat: Latitude array in WGS84 degrees with the same shape as *lon*.
+        include_antarctica: Whether to include land south of ``60°S``. Defaults
+            to ``False`` because land-trained location encoders rarely sample
+            Antarctica and polar extrapolation otherwise dominates global PCA.
+
+    Returns:
+        Boolean array with the same shape as *lon* (``True`` on land).
+
+    Raises:
+        ValueError: If *lon* and *lat* do not have matching shapes.
+    """
+    lon_arr = np.asarray(lon, dtype=np.float64)
+    lat_arr = np.asarray(lat, dtype=np.float64)
+    if lon_arr.shape != lat_arr.shape:
+        raise ValueError(
+            f'lon and lat must have matching shapes, got {lon_arr.shape} and '
+            f'{lat_arr.shape}.'
+        )
+    grid = _load_land_mask_grid()
+    n_lat, n_lon = grid.shape
+    lon_wrapped = ((lon_arr + 180.0) % 360.0) - 180.0
+    lat_clamped = np.clip(lat_arr, -90.0, 90.0)
+    row = np.clip(
+        np.floor((90.0 - lat_clamped) * (n_lat / 180.0)).astype(np.intp), 0, n_lat - 1
+    )
+    col = np.clip(
+        np.floor((lon_wrapped + 180.0) * (n_lon / 360.0)).astype(np.intp), 0, n_lon - 1
+    )
+    mask = grid[row, col].copy()
+    if not include_antarctica:
+        mask &= lat_arr >= -60.0
+    return mask
 
 
 def make_coord_grid(
@@ -170,6 +229,9 @@ def embeddings_to_rgb(
     *,
     components: Sequence[int] = (0, 1, 2),
     percentile: tuple[float, float] = (2.0, 98.0),
+    mask: NDArray[np.bool_] | None = None,
+    weights: NDArray[np.floating[Any]] | None = None,
+    background: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> NDArray[np.float32]:
     """Project an ``(H, W, D)`` embedding grid into a ``[0, 1]`` RGB image via PCA.
 
@@ -179,13 +241,22 @@ def embeddings_to_rgb(
             ``(R, G, B)`` (e.g. ``(0, 1, 2)`` for global structure or
             ``(3, 4, 5)`` for finer regional variation).
         percentile: Low and high clipping percentiles ``(p_low, p_high)`` in
-            ``[0, 100]`` applied independently per channel.
+            ``[0, 100]`` applied independently per channel on valid pixels.
+        mask: Optional boolean array of shape ``(H, W)`` restricting PCA
+            fitting, contrast stretching, and rendering to ``True`` pixels
+            (e.g. from :func:`make_land_mask`).
+        weights: Optional non-negative sample-weight array of shape ``(H, W)``
+            used for area-weighted PCA mean and covariance (e.g. ``cos(lat)``
+            on equirectangular grids).
+        background: RGB color in ``[0, 1]`` used to fill masked or non-finite
+            pixels.
 
     Returns:
         Float32 RGB array of shape ``(H, W, 3)`` with values in ``[0.0, 1.0]``.
 
     Raises:
-        ValueError: If *embeddings*, *components*, or *percentile* is invalid.
+        ValueError: If *embeddings*, *components*, *percentile*, *mask*,
+            *weights*, or *background* is invalid.
     """
     arr = np.asarray(embeddings, dtype=np.float64)
     if arr.ndim != 3 or arr.shape[2] == 0:
@@ -201,19 +272,60 @@ def embeddings_to_rgb(
         raise ValueError(
             f'percentile must satisfy 0 <= low < high <= 100, got {percentile!r}.'
         )
+    bg = np.asarray(background, dtype=np.float32)
+    if (
+        bg.shape != (3,)
+        or not np.isfinite(bg).all()
+        or (bg < 0.0).any()
+        or (bg > 1.0).any()
+    ):
+        raise ValueError(
+            f'background must be an RGB 3-tuple in [0, 1], got {background!r}.'
+        )
 
     h, w, d = arr.shape
     flat = arr.reshape(h * w, d)
     valid = np.isfinite(flat).all(axis=1)
-    rgb = np.zeros((h * w, 3), dtype=np.float32)
+    if mask is not None:
+        mask_arr = np.asarray(mask, dtype=np.bool_)
+        if mask_arr.shape != (h, w):
+            raise ValueError(
+                f'mask shape {mask_arr.shape} does not match grid shape {(h, w)}.'
+            )
+        valid &= mask_arr.reshape(-1)
+
+    w_arr: NDArray[np.float64] | None = None
+    if weights is not None:
+        w_arr = np.asarray(weights, dtype=np.float64)
+        if w_arr.shape != (h, w):
+            raise ValueError(
+                f'weights shape {w_arr.shape} does not match grid shape {(h, w)}.'
+            )
+
+    rgb = np.empty((h * w, 3), dtype=np.float32)
+    rgb[:] = bg
     if not valid.any():
         return rgb.reshape(h, w, 3)
 
     x = flat[valid]
-    mean = x.mean(axis=0, keepdims=True)
-    centered = x - mean
-    # Compute top principal directions via SVD of the centered embedding matrix
-    _, _, vt = np.linalg.svd(centered, full_matrices=False)
+    if w_arr is not None:
+        w_valid = w_arr.reshape(-1)[valid]
+        if not np.isfinite(w_valid).all() or (w_valid < 0.0).any():
+            raise ValueError('weights must contain finite non-negative values.')
+        w_sum = float(w_valid.sum())
+        if w_sum <= 0.0:
+            raise ValueError('weights must have positive total weight on valid pixels.')
+        w_norm = w_valid / w_sum
+        mean = (w_norm[:, None] * x).sum(axis=0, keepdims=True)
+        centered = x - mean
+        _, _, vt = np.linalg.svd(
+            centered * np.sqrt(w_norm)[:, None], full_matrices=False
+        )
+    else:
+        mean = x.mean(axis=0, keepdims=True)
+        centered = x - mean
+        _, _, vt = np.linalg.svd(centered, full_matrices=False)
+
     max_comp = vt.shape[0]
     proj = np.zeros((x.shape[0], 3), dtype=np.float64)
     for out_idx, comp_idx in enumerate(components):
@@ -240,6 +352,11 @@ def plot_embedding_map(
     *,
     components: Sequence[int] = (0, 1, 2),
     percentile: tuple[float, float] = (2.0, 98.0),
+    mask: NDArray[np.bool_] | None = None,
+    land_only: bool = False,
+    include_antarctica: bool = False,
+    area_weighted: bool = True,
+    background: tuple[float, float, float] = (0.96, 0.97, 0.99),
     ax: Any = None,
     title: str | None = None,
     figsize: tuple[float, float] = (10.0, 5.0),
@@ -254,6 +371,17 @@ def plot_embedding_map(
         embeddings: Embedding grid of shape ``(H, W, D)``.
         components: Three zero-based principal component indices mapped to RGB.
         percentile: Low/high percentile contrast stretch per channel.
+        mask: Optional boolean mask of shape ``(H, W)`` restricting PCA and
+            rendering to ``True`` pixels.
+        land_only: If ``True``, fit PCA and render strictly on land pixels
+            using :func:`make_land_mask` (recommended for land-trained encoders
+            such as SINR, SatCLIP, GeoCLIP, and MIND).
+        include_antarctica: Passed to :func:`make_land_mask` when *land_only*
+            is ``True`` (defaults to ``False``).
+        area_weighted: If ``True`` (default), weight PCA mean and covariance by
+            ``cos(lat)`` so high-latitude equirectangular pixels do not bias
+            the principal components.
+        background: RGB color in ``[0, 1]`` for masked or non-finite pixels.
         ax: Optional existing Matplotlib ``Axes`` to draw onto.
         title: Optional plot title.
         figsize: Figure size ``(width, height)`` in inches when *ax* is omitted.
@@ -282,7 +410,34 @@ def plot_embedding_map(
             f'grid shape {lon_arr.shape}.'
         )
 
-    rgb = embeddings_to_rgb(emb_arr, components=components, percentile=percentile)
+    resolved_mask: NDArray[np.bool_] | None = (
+        None if mask is None else np.asarray(mask, dtype=np.bool_)
+    )
+    if land_only:
+        land_mask = make_land_mask(
+            lon_arr, lat_arr, include_antarctica=include_antarctica
+        )
+        if resolved_mask is None:
+            resolved_mask = land_mask
+        else:
+            if resolved_mask.shape != land_mask.shape:
+                raise ValueError(
+                    f'mask shape {resolved_mask.shape} does not match '
+                    f'grid shape {land_mask.shape}.'
+                )
+            resolved_mask = resolved_mask & land_mask
+
+    weights = (
+        np.clip(np.cos(np.deg2rad(lat_arr)), 1e-6, None) if area_weighted else None
+    )
+    rgb = embeddings_to_rgb(
+        emb_arr,
+        components=components,
+        percentile=percentile,
+        mask=resolved_mask,
+        weights=weights,
+        background=background,
+    )
 
     h, w = lon_arr.shape
     dx = abs(float(lon_arr[0, 1] - lon_arr[0, 0])) if w > 1 else 1.0
@@ -309,4 +464,10 @@ def plot_embedding_map(
     return fig, ax
 
 
-__all__ = ('embeddings_to_rgb', 'encode_grid', 'make_coord_grid', 'plot_embedding_map')
+__all__ = (
+    'embeddings_to_rgb',
+    'encode_grid',
+    'make_coord_grid',
+    'make_land_mask',
+    'plot_embedding_map',
+)

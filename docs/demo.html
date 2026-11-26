@@ -699,6 +699,11 @@
         Coastlines
       </label>
 
+      <label class="checkbox-field" title="Fit PCA and render on habitable land (60°S–85°N) only">
+        <input id="land-only-toggle" type="checkbox" checked />
+        Land only
+      </label>
+
       <button id="run-btn" class="px-btn px-btn-primary" type="button">Run</button>
     </div>
 
@@ -958,6 +963,7 @@
       const viewSelect = document.getElementById('view-select');
       const refitBtn = document.getElementById('refit-btn');
       const coastlinesToggle = document.getElementById('coastlines-toggle');
+      const landOnlyToggle = document.getElementById('land-only-toggle');
       const runBtn = document.getElementById('run-btn');
       const backendBadge = document.getElementById('backend-badge');
       const gridBadge = document.getElementById('grid-badge');
@@ -982,7 +988,9 @@
       const state = {
         runId: 0,
         preferredPrecision: 'fp32',
+        landPolygons: null,
         landGeoJson: null,
+        landMaskCache: null,
         bitmapCanvas: null,
         bitmapVersion: 0,
         embeddings: null,
@@ -1464,41 +1472,193 @@
         }
       }
 
+      function getMercatorRowAreaWeights(height) {
+        const rowWeights = new Float64Array(height);
+        for (let y = 0; y < height; y++) {
+          const my = MERC_Y_MAX - ((y + 0.5) / height) * (MERC_Y_MAX - MERC_Y_MIN);
+          const latRad = (mercYToLat(my) * Math.PI) / 180;
+          const c = Math.max(Math.cos(latRad), 1e-3);
+          // Equal-area ground weight on a uniform Web Mercator grid is cos^2(lat)
+          rowWeights[y] = c * c;
+        }
+        return rowWeights;
+      }
+
+      function getLandMask(width, height) {
+        if (!state.landPolygons) return null;
+        if (
+          state.landMaskCache &&
+          state.landMaskCache.width === width &&
+          state.landMaskCache.height === height
+        ) {
+          return state.landMaskCache;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#ffffff';
+
+        function drawPolygonRings(rings) {
+          if (!Array.isArray(rings) || rings.length === 0) return;
+          const unwrappedRings = [];
+          let minLon = Infinity;
+          let maxLon = -Infinity;
+          let maxLat = -Infinity;
+
+          for (let r = 0; r < rings.length; r++) {
+            const ring = rings[r];
+            if (!Array.isArray(ring) || ring.length < 3) continue;
+            const pts = [];
+            let curLon = ring[0][0];
+            for (let i = 0; i < ring.length; i++) {
+              let lon = ring[i][0];
+              const lat = ring[i][1];
+              if (i > 0) {
+                while (lon - curLon > 180) lon -= 360;
+                while (lon - curLon < -180) lon += 360;
+              }
+              curLon = lon;
+              if (lon < minLon) minLon = lon;
+              if (lon > maxLon) maxLon = lon;
+              if (lat > maxLat) maxLat = lat;
+              pts.push([lon, lat]);
+            }
+            // Skip polar wrap rings (Antarctica) that span a full 360 deg without closing
+            if (Math.abs(pts[pts.length - 1][0] - pts[0][0]) > 180) continue;
+            unwrappedRings.push(pts);
+          }
+          if (unwrappedRings.length === 0 || maxLat < -60) return;
+
+          for (let shift = -360; shift <= 360; shift += 360) {
+            if (maxLon + shift < LON_MIN || minLon + shift > LON_MAX) continue;
+            ctx.beginPath();
+            for (let r = 0; r < unwrappedRings.length; r++) {
+              const pts = unwrappedRings[r];
+              for (let i = 0; i < pts.length; i++) {
+                const x = ((pts[i][0] + shift - LON_MIN) / (LON_MAX - LON_MIN)) * width;
+                const my = latToMercY(pts[i][1]);
+                const y = ((MERC_Y_MAX - my) / (MERC_Y_MAX - MERC_Y_MIN)) * height;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+              }
+              ctx.closePath();
+            }
+            ctx.fill('evenodd');
+          }
+        }
+
+        function walkGeom(geom) {
+          if (!geom) return;
+          if (geom.type === 'Polygon') {
+            drawPolygonRings(geom.coordinates);
+          } else if (geom.type === 'MultiPolygon') {
+            for (let i = 0; i < geom.coordinates.length; i++) {
+              drawPolygonRings(geom.coordinates[i]);
+            }
+          } else if (geom.type === 'GeometryCollection') {
+            for (let i = 0; i < geom.geometries.length; i++) {
+              walkGeom(geom.geometries[i]);
+            }
+          }
+        }
+
+        const geo = state.landPolygons;
+        if (geo.type === 'FeatureCollection') {
+          for (let i = 0; i < geo.features.length; i++) walkGeom(geo.features[i].geometry);
+        } else if (geo.type === 'Feature') {
+          walkGeom(geo.geometry);
+        } else {
+          walkGeom(geo);
+        }
+
+        const imgData = ctx.getImageData(0, 0, width, height).data;
+        const count = width * height;
+        const mask = new Uint8Array(count);
+        const indicesList = [];
+        const minLandLat = -60;
+        for (let y = 0; y < height; y++) {
+          const my = MERC_Y_MAX - ((y + 0.5) / height) * (MERC_Y_MAX - MERC_Y_MIN);
+          const lat = mercYToLat(my);
+          if (lat < minLandLat) continue;
+          const rowBase = y * width;
+          for (let x = 0; x < width; x++) {
+            const idx = rowBase + x;
+            if (imgData[idx * 4 + 3] > 0) {
+              mask[idx] = 1;
+              indicesList.push(idx);
+            }
+          }
+        }
+
+        const entry = { width, height, mask, indices: Int32Array.from(indicesList) };
+        state.landMaskCache = entry;
+        return entry;
+      }
+
+      function getActiveLandContext() {
+        if (!landOnlyToggle || !landOnlyToggle.checked) return null;
+        return getLandMask(state.gridW, state.gridH);
+      }
+
       function ensureGlobalPca(neededComponents) {
         const embeddings = state.embeddings;
         const width = state.gridW;
         const height = state.gridH;
         const dim = state.embedDim;
         const count = width * height;
+        const landCtx = getActiveLandContext();
+        const maskKey = landCtx ? 'land:' + width + 'x' + height : 'all:' + width + 'x' + height;
 
-        if (!state.globalPca) {
+        if (!state.globalPca || state.globalPca.maskKey !== maskKey) {
+          const rowWeights = getMercatorRowAreaWeights(height);
+          const poolLen = landCtx ? landCtx.indices.length : count;
           const maxFitSamples = 8192;
-          const stride = Math.max(1, Math.floor(count / maxFitSamples));
-          const sampleCount = Math.ceil(count / stride);
+          const stride = Math.max(1, Math.floor(poolLen / maxFitSamples));
+          const sampleCount = Math.ceil(poolLen / stride);
 
           const mean = new Float64Array(dim);
-          for (let i = 0; i < count; i += stride) {
-            const base = i * dim;
+          let weightSum = 0;
+          for (let s = 0; s < poolLen; s += stride) {
+            const idx = landCtx ? landCtx.indices[s] : s;
+            const w = rowWeights[Math.floor(idx / width)];
+            const base = idx * dim;
+            let allFinite = true;
             for (let d = 0; d < dim; d++) {
-              const val = embeddings[base + d];
-              if (Number.isFinite(val)) mean[d] += val;
+              if (!Number.isFinite(embeddings[base + d])) {
+                allFinite = false;
+                break;
+              }
+            }
+            if (!allFinite) continue;
+            weightSum += w;
+            for (let d = 0; d < dim; d++) {
+              mean[d] += w * embeddings[base + d];
             }
           }
-          for (let d = 0; d < dim; d++) mean[d] /= sampleCount;
+          if (weightSum > 0) {
+            for (let d = 0; d < dim; d++) mean[d] /= weightSum;
+          }
 
           const centered = new Float32Array(sampleCount * dim);
           let sIdx = 0;
-          for (let i = 0; i < count; i += stride) {
-            const src = i * dim;
+          const invWeightSum = weightSum > 0 ? 1 / weightSum : 0;
+          for (let s = 0; s < poolLen; s += stride) {
+            const idx = landCtx ? landCtx.indices[s] : s;
+            const sqrtW = Math.sqrt(rowWeights[Math.floor(idx / width)] * invWeightSum);
+            const src = idx * dim;
             const dst = sIdx * dim;
             for (let d = 0; d < dim; d++) {
               const val = embeddings[src + d];
-              centered[dst + d] = Number.isFinite(val) ? val - mean[d] : 0;
+              centered[dst + d] = Number.isFinite(val) ? (val - mean[d]) * sqrtW : 0;
             }
             sIdx++;
           }
 
           state.globalPca = {
+            maskKey,
             mean,
             centered,
             sampleCount,
@@ -1532,6 +1692,7 @@
             const acc = new Float64Array(kLen);
 
             for (let i = 0; i < count; i++) {
+              if (landCtx && !landCtx.mask[i]) continue;
               const base = i * dim;
               acc.fill(0);
               for (let d = 0; d < dim; d++) {
@@ -1555,7 +1716,7 @@
         return pca;
       }
 
-      function renderRgbScoresToCanvas(s0Arr, s1Arr, s2Arr, width, height, boundsIndices) {
+      function renderRgbScoresToCanvas(s0Arr, s1Arr, s2Arr, width, height, boundsIndices, alphaMask) {
         const count = width * height;
         const b0 = boundsIndices
           ? percentileBoundsSubset(s0Arr, boundsIndices, 0.02, 0.98)
@@ -1577,6 +1738,10 @@
         const rgba = new Uint8ClampedArray(count * 4);
         for (let i = 0; i < count; i++) {
           const px = i * 4;
+          if (alphaMask && !alphaMask[i]) {
+            rgba[px + 3] = 0;
+            continue;
+          }
           rgba[px] = clampByte((s0Arr[i] - lo0) * sc0);
           rgba[px + 1] = clampByte((s1Arr[i] - lo1) * sc1);
           rgba[px + 2] = clampByte((s2Arr[i] - lo2) * sc2);
@@ -1587,13 +1752,15 @@
 
       function renderGlobalPcaTriplet(startComp) {
         const pca = ensureGlobalPca(startComp + 3);
+        const landCtx = getActiveLandContext();
         const canvas = renderRgbScoresToCanvas(
           pca.scores[startComp],
           pca.scores[startComp + 1],
           pca.scores[startComp + 2],
           state.gridW,
           state.gridH,
-          null
+          landCtx ? landCtx.indices : null,
+          landCtx ? landCtx.mask : null
         );
         return { canvas };
       }
@@ -1692,33 +1859,61 @@
         const height = state.gridH;
         const dim = state.embedDim;
         const count = width * height;
+        const landCtx = getActiveLandContext();
 
         const bounds = getCurrentViewportBounds();
-        const vpIndices = getViewportPixelIndices(bounds, width, height);
+        let vpIndices = getViewportPixelIndices(bounds, width, height);
+        if (landCtx) {
+          const filtered = [];
+          for (let i = 0; i < vpIndices.length; i++) {
+            const idx = vpIndices[i];
+            if (landCtx.mask[idx]) filtered.push(idx);
+          }
+          if (filtered.length >= 16) {
+            vpIndices = Int32Array.from(filtered);
+          }
+        }
         const vpCount = vpIndices.length;
 
+        const rowWeights = getMercatorRowAreaWeights(height);
         const maxFitSamples = 8192;
         const stride = Math.max(1, Math.floor(vpCount / maxFitSamples));
         const sampleCount = Math.ceil(vpCount / stride);
 
         const mean = new Float64Array(dim);
+        let weightSum = 0;
         for (let i = 0; i < vpCount; i += stride) {
-          const base = vpIndices[i] * dim;
+          const idx = vpIndices[i];
+          const w = rowWeights[Math.floor(idx / width)];
+          const base = idx * dim;
+          let allFinite = true;
           for (let d = 0; d < dim; d++) {
-            const val = embeddings[base + d];
-            if (Number.isFinite(val)) mean[d] += val;
+            if (!Number.isFinite(embeddings[base + d])) {
+              allFinite = false;
+              break;
+            }
+          }
+          if (!allFinite) continue;
+          weightSum += w;
+          for (let d = 0; d < dim; d++) {
+            mean[d] += w * embeddings[base + d];
           }
         }
-        for (let d = 0; d < dim; d++) mean[d] /= sampleCount;
+        if (weightSum > 0) {
+          for (let d = 0; d < dim; d++) mean[d] /= weightSum;
+        }
 
         const centered = new Float32Array(sampleCount * dim);
         let sIdx = 0;
+        const invWeightSum = weightSum > 0 ? 1 / weightSum : 0;
         for (let i = 0; i < vpCount; i += stride) {
-          const src = vpIndices[i] * dim;
+          const idx = vpIndices[i];
+          const sqrtW = Math.sqrt(rowWeights[Math.floor(idx / width)] * invWeightSum);
+          const src = idx * dim;
           const dst = sIdx * dim;
           for (let d = 0; d < dim; d++) {
             const val = embeddings[src + d];
-            centered[dst + d] = Number.isFinite(val) ? val - mean[d] : 0;
+            centered[dst + d] = Number.isFinite(val) ? (val - mean[d]) * sqrtW : 0;
           }
           sIdx++;
         }
@@ -1739,6 +1934,7 @@
         const b2 = basis[2];
 
         for (let i = 0; i < count; i++) {
+          if (landCtx && !landCtx.mask[i]) continue;
           const base = i * dim;
           let p0 = 0;
           let p1 = 0;
@@ -1761,7 +1957,8 @@
           scores[2],
           width,
           height,
-          vpIndices
+          vpIndices,
+          landCtx ? landCtx.mask : null
         );
         return { canvas, samplePixels: vpCount };
       }
@@ -1833,13 +2030,17 @@
         return grad;
       }
 
-      function renderScalarColormapCanvas(values, width, height, lut, lo, hi) {
+      function renderScalarColormapCanvas(values, width, height, lut, lo, hi, alphaMask) {
         const count = width * height;
         const scale = hi > lo ? 255 / (hi - lo) : 0;
         const rgba = new Uint8ClampedArray(count * 4);
         for (let i = 0; i < count; i++) {
-          const cIdx = clampByte((values[i] - lo) * scale) * 3;
           const px = i * 4;
+          if (alphaMask && !alphaMask[i]) {
+            rgba[px + 3] = 0;
+            continue;
+          }
+          const cIdx = clampByte((values[i] - lo) * scale) * 3;
           rgba[px] = lut[cIdx];
           rgba[px + 1] = lut[cIdx + 1];
           rgba[px + 2] = lut[cIdx + 2];
@@ -1850,8 +2051,19 @@
 
       function renderGradientView() {
         const grad = ensureGradientValues();
-        const [lo, hi] = percentileBounds(grad, 0.02, 0.98);
-        const canvas = renderScalarColormapCanvas(grad, state.gridW, state.gridH, INFERNO_LUT, lo, hi);
+        const landCtx = getActiveLandContext();
+        const [lo, hi] = landCtx
+          ? percentileBoundsSubset(grad, landCtx.indices, 0.02, 0.98)
+          : percentileBounds(grad, 0.02, 0.98);
+        const canvas = renderScalarColormapCanvas(
+          grad,
+          state.gridW,
+          state.gridH,
+          INFERNO_LUT,
+          lo,
+          hi,
+          landCtx ? landCtx.mask : null
+        );
         return { canvas };
       }
 
@@ -1861,6 +2073,7 @@
         const height = state.gridH;
         const dim = state.embedDim;
         const count = width * height;
+        const landCtx = getActiveLandContext();
 
         const seedPx = coordToPixel(state.simSeed.lon, state.simSeed.lat, width, height);
         const refBase = seedPx.pixelIdx * dim;
@@ -1875,13 +2088,23 @@
             dot += unit[base + d] * refVec[d];
           }
           sim[i] = dot;
-          if (dot > maxSim) maxSim = dot;
+          if ((!landCtx || landCtx.mask[i]) && dot > maxSim) maxSim = dot;
         }
 
         state.similarityValues = sim;
-        const [p02] = percentileBounds(sim, 0.02, 0.98);
+        const [p02] = landCtx
+          ? percentileBoundsSubset(sim, landCtx.indices, 0.02, 0.98)
+          : percentileBounds(sim, 0.02, 0.98);
         const hi = Math.max(maxSim, p02 + 1e-4);
-        const canvas = renderScalarColormapCanvas(sim, width, height, VIRIDIS_LUT, p02, hi);
+        const canvas = renderScalarColormapCanvas(
+          sim,
+          width,
+          height,
+          VIRIDIS_LUT,
+          p02,
+          hi,
+          landCtx ? landCtx.mask : null
+        );
         return { canvas };
       }
 
@@ -2218,8 +2441,15 @@
           if (!resp.ok) return;
           const topo = await resp.json();
           if (typeof topojson !== 'undefined' && topo.objects && topo.objects.land) {
-            state.landGeoJson = splitAntimeridianLines(topojson.feature(topo, topo.objects.land));
-            renderDeck();
+            state.landPolygons = topojson.feature(topo, topo.objects.land);
+            state.landGeoJson = splitAntimeridianLines(state.landPolygons);
+            state.landMaskCache = null;
+            if (state.embeddings && landOnlyToggle && landOnlyToggle.checked) {
+              state.globalPca = null;
+              applyCurrentView();
+            } else {
+              renderDeck();
+            }
           }
         } catch (_err) {
           // Coastline overlay is optional; map still renders without it.
@@ -2354,6 +2584,14 @@
         });
       }
       coastlinesToggle.addEventListener('change', renderDeck);
+      if (landOnlyToggle) {
+        landOnlyToggle.addEventListener('change', () => {
+          state.globalPca = null;
+          if (state.embeddings) {
+            applyCurrentView();
+          }
+        });
+      }
       runBtn.addEventListener('click', runPipeline);
 
       syncPrecisionOptions(modelSelect.value, state.preferredPrecision);

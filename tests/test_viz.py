@@ -19,6 +19,7 @@ from neuralftw import (
     embeddings_to_rgb,
     encode_grid,
     make_coord_grid,
+    make_land_mask,
     plot_embedding_map,
 )
 
@@ -261,8 +262,68 @@ class TestEmbeddingsToRgbAndPlot:
         with pytest.raises(DependencyNotFoundError, match='matplotlib'):
             plot_embedding_map(lon, lat, emb)
 
+    def test_make_land_mask_and_masked_area_weighted_pca(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # St. Louis (land), central Pacific (ocean), South Pole (Antarctica)
+        lon = np.array([-90.2, -150.0, 0.0], dtype=np.float64)
+        lat = np.array([38.6, 0.0, -82.0], dtype=np.float64)
+        m_hab = make_land_mask(lon, lat)
+        assert m_hab.tolist() == [True, False, False]
+        m_all = make_land_mask(lon, lat, include_antarctica=True)
+        assert m_all.tolist() == [True, False, True]
+
+        with pytest.raises(ValueError, match='matching shapes'):
+            make_land_mask(lon, lat[:2])
+
+        # Masked + weighted embeddings_to_rgb fills masked pixels with background
+        lon_g, lat_g, emb = encode_grid('sincos', step_deg=30.0)
+        mask = make_land_mask(lon_g, lat_g)
+        weights = np.clip(np.cos(np.deg2rad(lat_g)), 1e-6, None)
+        bg = (0.9, 0.95, 1.0)
+        rgb = embeddings_to_rgb(emb, mask=mask, weights=weights, background=bg)
+        assert rgb.shape == (*lon_g.shape, 3)
+        np.testing.assert_allclose(rgb[~mask], np.broadcast_to(bg, rgb[~mask].shape))
+
+        # Validation branches for mask, weights, background
+        with pytest.raises(ValueError, match='background'):
+            embeddings_to_rgb(emb, background=(0.0, 1.5, 0.0))
+        with pytest.raises(ValueError, match='mask shape'):
+            embeddings_to_rgb(emb, mask=np.ones((2, 2), dtype=bool))
+        with pytest.raises(ValueError, match='weights shape'):
+            embeddings_to_rgb(emb, weights=np.ones((2, 2), dtype=np.float64))
+        with pytest.raises(ValueError, match='finite non-negative'):
+            embeddings_to_rgb(emb, weights=np.full(lon_g.shape, -1.0))
+        with pytest.raises(ValueError, match='positive total weight'):
+            embeddings_to_rgb(emb, weights=np.zeros(lon_g.shape))
+
+        # plot_embedding_map with land_only=True, custom mask, area_weighted=False
+        _install_fake_matplotlib(monkeypatch)
+        _, ax = plot_embedding_map(lon_g, lat_g, emb, land_only=True)
+        img, _ = ax.imshow_calls[0]
+        np.testing.assert_allclose(
+            img[~mask], np.broadcast_to((0.96, 0.97, 0.99), img[~mask].shape)
+        )
+
+        custom_mask = np.ones_like(mask, dtype=bool)
+        custom_mask[0, :] = False
+        _, ax2 = plot_embedding_map(
+            lon_g, lat_g, emb, mask=custom_mask, land_only=True, area_weighted=False
+        )
+        img2, _ = ax2.imshow_calls[0]
+        combined = mask & custom_mask
+        np.testing.assert_allclose(
+            img2[~combined], np.broadcast_to((0.96, 0.97, 0.99), img2[~combined].shape)
+        )
+
+        with pytest.raises(ValueError, match='mask shape'):
+            plot_embedding_map(
+                lon_g, lat_g, emb, mask=np.ones((2, 2), dtype=bool), land_only=True
+            )
+
     def test_top_level_viz_exports(self) -> None:
         assert neuralftw.make_coord_grid is make_coord_grid
+        assert neuralftw.make_land_mask is make_land_mask
         assert neuralftw.encode_grid is encode_grid
         assert neuralftw.embeddings_to_rgb is embeddings_to_rgb
         assert neuralftw.plot_embedding_map is plot_embedding_map
