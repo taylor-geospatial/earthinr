@@ -169,7 +169,9 @@ def _build_parser() -> argparse.ArgumentParser:
         '--knn-k', type=int, default=None, help='Number of neighbors for k-NN probe.'
     )
     coord_parser.add_argument(
-        '--knn-device', default=None, help='Device for k-NN probe (cpu or cuda[:idx]).'
+        '--knn-device',
+        default=None,
+        help='Device for k-NN probe (cpu, mps, or cuda[:idx]).',
     )
     coord_parser.add_argument(
         '--device',

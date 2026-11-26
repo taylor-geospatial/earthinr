@@ -36,17 +36,21 @@ class _FakeInferenceSession:
         providers: list[str] | None = None,
         embed_dim: int = 8,
         accepts_year: bool = False,
+        accepts_month: bool = False,
     ) -> None:
         self.model_path = model_path
         self.providers = list(providers) if providers is not None else []
         self.embed_dim = embed_dim
         self.accepts_year = accepts_year
+        self.accepts_month = accepts_month
         self.calls: list[tuple[list[str] | None, dict[str, np.ndarray]]] = []
 
     def get_inputs(self) -> list[_FakeNodeArg]:
         inputs = [_FakeNodeArg('coords', ['batch', 2])]
         if self.accepts_year:
             inputs.append(_FakeNodeArg('year', ['batch']))
+        if self.accepts_month:
+            inputs.append(_FakeNodeArg('month', ['batch']))
         return inputs
 
     def get_outputs(self) -> list[_FakeNodeArg]:
@@ -62,12 +66,18 @@ class _FakeInferenceSession:
         out = coords[:, :1] + 0.1 * coords[:, 1:2] + base
         if 'year' in input_feed:
             out = out + input_feed['year'][:, None] * 0.001
+        if 'month' in input_feed:
+            out = out + input_feed['month'][:, None] * 0.01
         assert out.shape == (batch, self.embed_dim)
         return [out.astype(np.float32)]
 
 
 def _install_fake_ort(
-    monkeypatch: pytest.MonkeyPatch, *, embed_dim: int = 8, accepts_year: bool = False
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    embed_dim: int = 8,
+    accepts_year: bool = False,
+    accepts_month: bool = False,
 ) -> list[_FakeInferenceSession]:
     sessions: list[_FakeInferenceSession] = []
 
@@ -75,7 +85,11 @@ def _install_fake_ort(
         path: str, providers: list[str] | None = None
     ) -> _FakeInferenceSession:
         sess = _FakeInferenceSession(
-            path, providers=providers, embed_dim=embed_dim, accepts_year=accepts_year
+            path,
+            providers=providers,
+            embed_dim=embed_dim,
+            accepts_year=accepts_year,
+            accepts_month=accepts_month,
         )
         sessions.append(sess)
         return sess
@@ -292,3 +306,61 @@ def test_onnx_quantized_precisions_and_mind_slicing(
         onnx_encoder('mind', precision='fp32')
     with pytest.raises(ValueError, match='not available for ONNX preset'):
         onnx_encoder('terranova', precision='int4')
+
+    # dim alias for Matryoshka models and conflict validation
+    enc_dim = onnx_encoder('mind', precision='int4', dim=128)
+    assert enc_dim.embed_dim == 128
+    assert enc_dim.slice_dim == 128
+    with pytest.raises(ValueError, match='at most one of dim'):
+        onnx_encoder('mind', dim=64, slice_dim=128)
+
+
+def test_accepts_month_default_and_explicit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sessions = _install_fake_ort(monkeypatch, embed_dim=6, accepts_month=True)
+    model_file = tmp_path / 'climplicit.onnx'
+    model_file.write_bytes(b'fake-onnx')
+    monkeypatch.setattr(onnx_mod, 'hf_download', lambda repo, fn: str(model_file))
+
+    with pytest.raises(ValueError, match='default_months must be non-empty'):
+        ONNXLocationEncoder(
+            model_path=model_file, accepts_month=True, default_months=()
+        )
+
+    enc_local = ONNXLocationEncoder(model_path=model_file, accepts_month=True)
+    assert enc_local.embed_dim == 24
+    lon = np.array([-122.4, 8.5], dtype=np.float64)
+    lat = np.array([37.8, 47.4], dtype=np.float64)
+
+    out_default = enc_local.encode(lon, lat)
+    assert out_default.shape == (2, 24)
+    assert len(sessions[0].calls) == 4
+    seen_months = [float(call[1]['month'][0]) for call in sessions[0].calls]
+    assert seen_months == [3.0, 6.0, 9.0, 12.0]
+
+    months = np.array([7.0, 1.0], dtype=np.float64)
+    out_single = enc_local.encode(lon, lat, month=months)
+    assert out_single.shape == (2, 6)
+    coords_t = torch.tensor(np.stack((lon, lat), axis=-1), dtype=torch.float32)
+    months_t = torch.tensor(months, dtype=torch.float32)
+    np.testing.assert_allclose(
+        enc_local(coords_t, month=months_t).numpy(), out_single, atol=1e-6
+    )
+
+    enc_preset = onnx_encoder('climplicit', precision='int8')
+    assert enc_preset.accepts_month is True
+    assert enc_preset.default_months == (3, 6, 9, 12)
+    assert enc_preset.embed_dim == 1024
+
+    enc_custom_months = onnx_encoder('climplicit', default_months=(1, 7))
+    assert enc_custom_months.default_months == (1, 7)
+
+    # Combined year + month input indexing
+    _install_fake_ort(monkeypatch, embed_dim=4, accepts_year=True, accepts_month=True)
+    enc_both = ONNXLocationEncoder(
+        model_path=model_file, accepts_year=True, accepts_month=True
+    )
+    assert enc_both.encode(
+        lon, lat, year=np.array([2020.0, 2021.0]), month=months
+    ).shape == (2, 4)

@@ -14,7 +14,7 @@ from sklearn.linear_model import Ridge
 from sklearn.utils.validation import check_array, check_X_y
 from torch import Tensor
 
-from .._utils import resolve_device
+from .._utils import float64_device, resolve_device
 from .metrics import confusion_matrix
 from .splits import random_fold_ids
 
@@ -482,7 +482,7 @@ def _run_ridge_cv(
     if test_mask is not None and fold_features is not None:
         raise ValueError('fold_features applies to k-fold splits only, not test_mask.')
 
-    dev = resolve_device(device)
+    dev = float64_device(resolve_device(device))
     valid = _valid_feature_label_mask(features, labels, task_type)
     valid_rows = np.flatnonzero(valid)
     n_valid = int(valid_rows.size)

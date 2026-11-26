@@ -11,6 +11,7 @@ import torch
 from torch import Tensor, nn
 
 from .._types import Path
+from .._utils import float64_dtype
 from ._base import LocationEncoder, Weights, WeightsEnum
 from ._utils import load_safetensors
 
@@ -338,9 +339,9 @@ class ClimplicitNet(nn.Module):
             ]
             return torch.cat(outputs, dim=-1)
 
-        angle = month.to(dtype=torch.float64, device=loc.device).unsqueeze(-1) * (
-            2.0 * math.pi / 12.0
-        )
+        angle = month.to(dtype=float64_dtype(loc.device), device=loc.device).unsqueeze(
+            -1
+        ) * (2.0 * math.pi / 12.0)
         return self._encode_month_features(
             loc,
             torch.sin(angle).to(dtype=loc.dtype),

@@ -11,6 +11,7 @@ import torch
 from torch import Tensor, nn
 
 from .._types import Path
+from .._utils import float64_dtype
 from ._base import LocationEncoder, Weights, WeightsEnum
 from ._utils import load_safetensors
 
@@ -122,10 +123,14 @@ class StableAnalyticSphericalHarmonics(nn.Module):
             )
 
         self.register_buffer('orders', orders, persistent=False)
-        self.register_buffer('diag_coeffs', diag_coeffs, persistent=False)
-        self.register_buffer('subdiag_coeffs', subdiag_coeffs, persistent=False)
-        self.register_buffer('alpha', alpha, persistent=False)
-        self.register_buffer('beta', beta, persistent=False)
+        self.register_buffer(
+            'diag_coeffs', diag_coeffs.to(self.compute_dtype), persistent=False
+        )
+        self.register_buffer(
+            'subdiag_coeffs', subdiag_coeffs.to(self.compute_dtype), persistent=False
+        )
+        self.register_buffer('alpha', alpha.to(self.compute_dtype), persistent=False)
+        self.register_buffer('beta', beta.to(self.compute_dtype), persistent=False)
 
     def forward(self, coords: Tensor) -> Tensor:
         """Evaluate real spherical harmonics on ``(lon, lat)`` coordinates in degrees.
@@ -510,7 +515,7 @@ class SatCLIPLocationEncoder(LocationEncoder):
         self.embed_dim = embed_dim
         self.posenc = StableAnalyticSphericalHarmonics(
             legendre_polys=legendre_polys,
-            compute_dtype=torch.float64,
+            compute_dtype=float64_dtype(self.device),
             output_dtype=torch.float32,
         )
         self.nnet = SirenNet(

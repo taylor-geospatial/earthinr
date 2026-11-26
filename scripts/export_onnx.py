@@ -41,7 +41,11 @@ from onnx import TensorProto, helper, numpy_helper
 from torch import Tensor, nn
 
 from neuralftw.models._base import LocationEncoder
-from neuralftw.models.climplicit import Climplicit_Weights, climplicit
+from neuralftw.models.climplicit import (
+    Climplicit_Weights,
+    ClimplicitLocationEncoder,
+    climplicit,
+)
 from neuralftw.models.csp import CSP_Weights, csp
 from neuralftw.models.geoclosp import GeoCLOSP_Weights, geoclosp
 from neuralftw.models.gtloc import GTLoc_Weights, gtloc
@@ -95,6 +99,7 @@ class ModelSpec:
     builder: Callable[[], LocationEncoder]
     output_dim: int
     temporal: bool = False
+    monthly: bool = False
     zoo: bool = True
 
 
@@ -146,7 +151,8 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
     ModelSpec(
         'climplicit',
         lambda: climplicit(weights=Climplicit_Weights.CHELSA, device='cpu'),
-        1024,
+        256,
+        monthly=True,
     ),
     ModelSpec('tte', lambda: tte(weights=TTE_Weights.DEFAULT, device='cpu'), 512),
     ModelSpec(
@@ -377,21 +383,46 @@ class _WebGPUTTEOnnxWrapper(nn.Module):
         return self.model(latlon)
 
 
+class _WebGPUClimplicitOnnxWrapper(nn.Module):
+    """Float32, WebGPU-safe monthly ONNX wrapper for Climplicit ``(coords, month) -> (B, 256)``."""
+
+    def __init__(self, encoder: ClimplicitLocationEncoder) -> None:
+        """Initialize the WebGPU-safe Climplicit wrapper."""
+        super().__init__()
+        self.model = encoder.model
+
+    def forward(self, coords: Tensor, month: Tensor) -> Tensor:
+        """Encode ``(lon, lat)`` degrees and calendar ``month`` in pure float32."""
+        loc = torch.stack((coords[:, 0] / 180.0, coords[:, 1] / 90.0), dim=-1).to(
+            dtype=torch.float32
+        )
+        angle = month.to(dtype=torch.float32).unsqueeze(-1) * (2.0 * math.pi / 12.0)
+        return self.model._encode_month_features(
+            loc, torch.sin(angle), torch.cos(angle)
+        )
+
+
 def _prepare_export_wrapper(
-    encoder: LocationEncoder, *, temporal: bool
+    encoder: LocationEncoder, *, temporal: bool, monthly: bool = False
 ) -> tuple[nn.Module, bool]:
     """Build a WebGPU/WASM-compatible ONNX export wrapper without mutating *encoder*.
 
     Replaces any ``StableAnalyticSphericalHarmonics`` submodules on a shallow copy
     with :class:`_WebGPUAnalyticSphericalHarmonics` (float32, no ``DOUBLE`` ops,
-    no negative-step ``Slice``) and avoids ``coords.flip(-1)`` for TTE.
+    no negative-step ``Slice``), avoids ``coords.flip(-1)`` for TTE, and wraps
+    Climplicit in pure float32 ``(coords, month) -> (B, 256)``.
 
     Returns:
         Tuple ``(export_wrapper, adapted)`` where ``adapted`` is True when the
         export graph uses a float32/WebGPU-safe rewrite distinct from *encoder*.
     """
+    if monthly and isinstance(encoder, ClimplicitLocationEncoder):
+        wrapper: nn.Module = _WebGPUClimplicitOnnxWrapper(encoder)
+        wrapper.eval()
+        return wrapper, True
+
     if isinstance(encoder, TTELocationEncoder):
-        wrapper: nn.Module = _WebGPUTTEOnnxWrapper(encoder)
+        wrapper = _WebGPUTTEOnnxWrapper(encoder)
         wrapper.eval()
         return wrapper, True
 
@@ -418,7 +449,7 @@ def _prepare_export_wrapper(
     wrapper = (
         _SpatiotemporalOnnxWrapper(encoder)
         if temporal
-        else _SpatialOnnxWrapper(encoder)
+        else (_MonthlyOnnxWrapper(encoder) if monthly else _SpatialOnnxWrapper(encoder))
     )
     wrapper.eval()
     return wrapper, False
@@ -471,6 +502,19 @@ class _SpatiotemporalOnnxWrapper(nn.Module):
             Float32 embedding tensor of shape ``(B, D)``.
         """
         return self.encoder(coords, year=year)
+
+
+class _MonthlyOnnxWrapper(nn.Module):
+    """Thin wrapper exposing a ``(coords, month) -> embedding`` signature."""
+
+    def __init__(self, encoder: LocationEncoder) -> None:
+        """Initialize the monthly ONNX wrapper."""
+        super().__init__()
+        self.encoder = encoder
+
+    def forward(self, coords: Tensor, month: Tensor) -> Tensor:
+        """Encode ``(lon, lat)`` coordinates and calendar months (``1..12``)."""
+        return self.encoder(coords, month=month)
 
 
 def sha256_file(path: Path) -> str:
@@ -611,7 +655,11 @@ def _verify_io_schema(
     inputs = sess.get_inputs()
     outputs = sess.get_outputs()
 
-    expected_inputs = ['coords', 'year'] if spec.temporal else ['coords']
+    expected_inputs = (
+        ['coords', 'year']
+        if spec.temporal
+        else (['coords', 'month'] if spec.monthly else ['coords'])
+    )
     actual_inputs = [inp.name for inp in inputs]
     if actual_inputs != expected_inputs:
         raise ValueError(
@@ -633,9 +681,10 @@ def _verify_io_schema(
             f'{spec.model_id}: coords input shape expected [batch, 2], '
             f'got {inputs[0].shape}'
         )
-    if spec.temporal and len(inputs[1].shape) != 1:
+    if (spec.temporal or spec.monthly) and len(inputs[1].shape) != 1:
         raise ValueError(
-            f'{spec.model_id}: year input shape expected [batch], got {inputs[1].shape}'
+            f'{spec.model_id}: {expected_inputs[1]} input shape expected [batch], '
+            f'got {inputs[1].shape}'
         )
 
     if len(outputs) != 1 or outputs[0].name != 'embedding':
@@ -772,28 +821,41 @@ def verify_onnx_parity(
         reference_wrapper.eval()
     for batch_size in TEST_BATCH_SIZES:
         coords_np, years_np = make_test_batch(batch_size)
+        months_np = ((np.arange(batch_size, dtype=np.float32) % 12) + 1.0).astype(
+            np.float32
+        )
         coords_t = torch.from_numpy(coords_np)
         years_t = torch.from_numpy(years_np)
+        months_t = torch.from_numpy(months_np)
 
         with torch.inference_mode():
-            pt_out = (
-                wrapper(coords_t, years_t).detach().cpu().numpy()
-                if spec.temporal
-                else wrapper(coords_t).detach().cpu().numpy()
-            )
-            ref_out = (
-                (
+            if spec.temporal:
+                pt_out = wrapper(coords_t, years_t).detach().cpu().numpy()
+                ref_out = (
                     reference_wrapper(coords_t, years_t).detach().cpu().numpy()
-                    if spec.temporal
-                    else reference_wrapper(coords_t).detach().cpu().numpy()
+                    if reference_wrapper is not None
+                    else None
                 )
-                if reference_wrapper is not None
-                else None
-            )
+            elif spec.monthly:
+                pt_out = wrapper(coords_t, months_t).detach().cpu().numpy()
+                ref_out = (
+                    reference_wrapper(coords_t, months_t).detach().cpu().numpy()
+                    if reference_wrapper is not None
+                    else None
+                )
+            else:
+                pt_out = wrapper(coords_t).detach().cpu().numpy()
+                ref_out = (
+                    reference_wrapper(coords_t).detach().cpu().numpy()
+                    if reference_wrapper is not None
+                    else None
+                )
 
         feed: dict[str, np.ndarray] = {'coords': coords_np}
         if spec.temporal:
             feed['year'] = years_np
+        elif spec.monthly:
+            feed['month'] = months_np
         ort_out = sess.run(['embedding'], feed)[0]
 
         if pt_out.shape != (batch_size, spec.output_dim):
@@ -1188,10 +1250,16 @@ def export_model(
     ref_wrapper: nn.Module = (
         _SpatiotemporalOnnxWrapper(encoder)
         if spec.temporal
-        else _SpatialOnnxWrapper(encoder)
+        else (
+            _MonthlyOnnxWrapper(encoder)
+            if spec.monthly
+            else _SpatialOnnxWrapper(encoder)
+        )
     )
     ref_wrapper.eval()
-    wrapper, adapted = _prepare_export_wrapper(encoder, temporal=spec.temporal)
+    wrapper, adapted = _prepare_export_wrapper(
+        encoder, temporal=spec.temporal, monthly=spec.monthly
+    )
 
     quant_meta: dict[str, Any] | None = None
     if not (skip_existing and onnx_path.exists()):
@@ -1199,6 +1267,7 @@ def export_model(
         dummy_coords_np, dummy_years_np = make_test_batch(4)
         dummy_coords = torch.from_numpy(dummy_coords_np)
         dummy_years = torch.from_numpy(dummy_years_np)
+        dummy_months = torch.tensor([3.0, 6.0, 9.0, 12.0], dtype=torch.float32)
         batch_dim = torch.export.Dim('batch', min=1)
 
         if spec.temporal:
@@ -1208,6 +1277,10 @@ def export_model(
                 'coords': {0: batch_dim},
                 'year': {0: batch_dim},
             }
+        elif spec.monthly:
+            args = (dummy_coords, dummy_months)
+            input_names = ['coords', 'month']
+            dynamic_shapes = {'coords': {0: batch_dim}, 'month': {0: batch_dim}}
         else:
             args = (dummy_coords,)
             input_names = ['coords']

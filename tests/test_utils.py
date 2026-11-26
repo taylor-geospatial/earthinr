@@ -13,7 +13,7 @@ from neuralftw._errors import (
     DependencyNotFoundError,
     NeuralFTWError,
 )
-from neuralftw._utils import lazy_import, resolve_device
+from neuralftw._utils import float64_device, float64_dtype, lazy_import, resolve_device
 from neuralftw.cli import main
 
 
@@ -130,3 +130,9 @@ class TestResolveDevice:
     def test_invalid_device_strings(self, bad_device: str) -> None:
         with pytest.raises(ValueError, match=r'Device string|Invalid device'):
             resolve_device(bad_device)
+
+    def test_float64_mps_fallbacks(self) -> None:
+        assert float64_dtype(torch.device('cpu')) == torch.float64
+        assert float64_dtype(torch.device('mps')) == torch.float32
+        assert float64_device(torch.device('cpu')) == torch.device('cpu')
+        assert float64_device(torch.device('mps')) == torch.device('cpu')

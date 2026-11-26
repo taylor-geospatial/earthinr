@@ -85,7 +85,7 @@ Half-sill distance measures the spatial lag over which an encoder's embeddings d
   $$\text{PR} = \frac{\left(\sum_i \lambda_i\right)^2}{\sum_i \lambda_i^2}.$$
 
   `PR` counts the effective number of orthogonal linear directions carrying variance across the sampled locations and is invariant to orthogonal rotations and positive scalar rescaling.
-- **Nonlinear manifold estimators (`TwoNN`, `MLE`, `MOM`, `TLE`, `FisherS`)**: computed via optional [`torchid`](https://github.com/isaaccorley/torchid) on centered float64 embeddings after removing exact duplicate rows. Following the stability protocol from GeoINRID and MIND, nearest-neighbor queries are routed through `torchid`'s pure-PyTorch float64 k-NN path rather than float32 FAISS so large-norm encoders (such as `csp-inat`) do not suffer squared-distance cancellation. `MLE`, `MOM`, and `TLE` use $k = 20$ neighbors; `FisherS` uses `conditional_number=10.0`.
+- **Nonlinear manifold estimators (`TwoNN`, `MLE`, `MOM`, `TLE`, `FisherS`)**: computed via [`torchid`](https://github.com/isaaccorley/torchid) (`>=0.6.0`, pure-PyTorch exact k-NN with no FAISS dependency) on centered float64 embeddings after removing exact duplicate rows, avoiding float32 squared-distance cancellation on large-norm encoders (such as `csp-inat`). `MLE`, `MOM`, and `TLE` use $k = 20$ neighbors; `FisherS` uses `conditional_number=10.0`.
 
 ### 100 km Land-Grid Protocol
 

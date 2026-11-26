@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from .._utils import float64_dtype
 from ._base import LocationEncoder
 from ._utils import lonlat_to_xyz
 from .satclip import StableAnalyticSphericalHarmonics
@@ -241,7 +242,7 @@ class AnalyticSphericalHarmonicLocationEncoder(LocationEncoder):
         super().__init__(device=device, batch_size=batch_size)
         self.posenc = StableAnalyticSphericalHarmonics(
             legendre_polys=legendre_polys,
-            compute_dtype=torch.float64,
+            compute_dtype=float64_dtype(self.device),
             output_dtype=torch.float32,
         )
         self.legendre_polys = legendre_polys
