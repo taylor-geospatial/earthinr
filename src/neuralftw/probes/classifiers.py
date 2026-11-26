@@ -8,16 +8,46 @@ from typing import Any
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 from torch import Tensor, nn
 
-from .._errors import DependencyNotFoundError
-from .._utils import lazy_import, resolve_device
+from .._utils import resolve_device
 from .linear import _inner_splits, _resolve_outer_splits, _valid_feature_label_mask
 from .metrics import confusion_matrix
 
 DEFAULT_LOGREG_CS: tuple[float, ...] = (1e-4, 1e-3, 1e-2, 1e-1, 1.0, 1e1, 1e2, 1e3, 1e4)
+
+
+def _torch_knn_predict(
+    x_tr: NDArray[np.float32],
+    y_tr: NDArray[np.int64],
+    x_te: NDArray[np.float32],
+    *,
+    k: int,
+    n_classes: int,
+    device: torch.device,
+    chunk_size: int = 1024,
+) -> NDArray[np.int64]:
+    """Exact L2 k-NN majority-vote classifier in pure PyTorch."""
+    x_tr_t = torch.as_tensor(x_tr, dtype=torch.float32, device=device)
+    y_tr_t = torch.as_tensor(y_tr, dtype=torch.long, device=device)
+    preds: list[NDArray[np.int64]] = []
+    with torch.inference_mode():
+        for start in range(0, len(x_te), chunk_size):
+            q = torch.as_tensor(
+                x_te[start : start + chunk_size], dtype=torch.float32, device=device
+            )
+            dists = torch.cdist(q, x_tr_t, p=2.0)
+            _, top_idx = torch.topk(dists, k=k, dim=1, largest=False)
+            nbr_labels = y_tr_t[top_idx]
+            votes = torch.zeros(
+                (q.shape[0], n_classes), dtype=torch.int64, device=device
+            )
+            votes.scatter_add_(
+                1, nbr_labels, torch.ones_like(nbr_labels, dtype=torch.int64)
+            )
+            preds.append(votes.argmax(dim=1).cpu().numpy().astype(np.int64))
+    return np.concatenate(preds, axis=0)
 
 
 def knn_probe_score(
@@ -31,11 +61,12 @@ def knn_probe_score(
     test_mask: NDArray[np.bool_] | None = None,
     fold_assign: NDArray[np.integer[Any]] | None = None,
     confusions: list[NDArray[np.int64]] | None = None,
+    chunk_size: int = 1024,
 ) -> tuple[float, list[float]]:
-    """Evaluate classification accuracy with a k-NN probe on standardized features.
+    """Evaluate classification accuracy with an exact PyTorch L2 k-NN probe.
 
-    Uses ``faissknn`` via :func:`neuralftw._utils.lazy_import` when installed and
-    falls back cleanly to :class:`sklearn.neighbors.KNeighborsClassifier`.
+    Standardizes features inside each fold and runs chunked exact Euclidean
+    nearest-neighbor lookup via ``torch.cdist`` on *device* (CPU, CUDA, or MPS).
 
     Args:
         features: Two-dimensional feature matrix of shape ``(N, D)``.
@@ -43,20 +74,24 @@ def knn_probe_score(
         k: Number of nearest neighbors (must be at least 1).
         folds: Number of CV folds when neither *test_mask* nor *fold_assign* is set.
         seed: Random seed for fold partitioning.
-        device: Target device string or object (used when ``faissknn`` is available).
+        device: Target PyTorch device string or object.
         test_mask: Optional boolean mask marking held-out test rows.
         fold_assign: Optional integer fold-group assignment per row.
         confusions: Optional list populated with one ``[C, C]`` confusion matrix per
             scored outer fold.
+        chunk_size: Maximum number of query points scored per ``torch.cdist`` chunk.
 
     Returns:
         Tuple ``(mean_accuracy, fold_accuracies)``.
 
     Raises:
-        ValueError: If *k* < 1, fewer than 2 valid samples exist, or splits are invalid.
+        ValueError: If *k* < 1, *chunk_size* < 1, fewer than 2 valid samples
+            exist, or splits are invalid.
     """
     if k < 1:
         raise ValueError(f'k must be at least 1, got {k}.')
+    if chunk_size < 1:
+        raise ValueError(f'chunk_size must be at least 1, got {chunk_size}.')
     dev = resolve_device(device)
     valid = _valid_feature_label_mask(features, labels, 'classification')
     n_valid = int(valid.sum())
@@ -71,12 +106,6 @@ def knn_probe_score(
         n_valid, valid, folds, seed, test_mask, fold_assign
     )
 
-    try:
-        faissknn_mod = lazy_import('faissknn', extra='knn')
-    except DependencyNotFoundError:
-        faissknn_mod = None
-
-    faiss_dev = 'cuda' if dev.type == 'cuda' else 'cpu'
     fold_scores: list[float] = []
     for tr_idx, te_idx in outer_splits:
         scaler = StandardScaler().fit(feats[tr_idx])
@@ -85,16 +114,15 @@ def knn_probe_score(
         y_tr = y[tr_idx]
         y_te = y[te_idx]
         k_eff = min(k, len(tr_idx))
-        if faissknn_mod is not None:
-            model = faissknn_mod.FaissKNNClassifier(
-                n_neighbors=k_eff, n_classes=n_classes, device=faiss_dev, metric='l2'
-            )
-            model.fit(x_tr, y_tr)
-            pred = np.asarray(model.predict(x_te), dtype=np.int64).ravel()
-        else:
-            clf = KNeighborsClassifier(n_neighbors=k_eff, metric='euclidean')
-            clf.fit(x_tr, y_tr)
-            pred = np.asarray(clf.predict(x_te), dtype=np.int64).ravel()
+        pred = _torch_knn_predict(
+            x_tr,
+            y_tr,
+            x_te,
+            k=k_eff,
+            n_classes=n_classes,
+            device=dev,
+            chunk_size=chunk_size,
+        )
         if confusions is not None:
             confusions.append(confusion_matrix(y_te, pred, n_classes))
         fold_scores.append(float(np.mean(pred == y_te)))

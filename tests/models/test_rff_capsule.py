@@ -123,44 +123,6 @@ class TestCoordOrderParityAndEncoders:
         np_out = geo_enc.encode(lon.numpy(), lat.numpy())
         assert np.allclose(np_out, out_geo.detach().numpy(), atol=1e-6)
 
-    def test_gair_legacy_pth_loading(self, tmp_path: Path) -> None:
-        ref = EqualEarthRFFEncoder(
-            sigma=(1.0, 16.0),
-            encoded_size=8,
-            hidden_dim=16,
-            out_dim=12,
-            coord_order='lonlat',
-        )
-        wrapped = {
-            'state_dict': {
-                **{f'module.loc_enc.{k}': v for k, v in ref.state_dict().items()},
-                'module.vision.weight': torch.zeros((4, 4)),
-            }
-        }
-        pth_path = tmp_path / 'gair.pth'
-        torch.save(wrapped, pth_path)
-
-        loaded = GAIRLocationEncoder(
-            checkpoint=pth_path,
-            sigma=(1.0, 16.0),
-            encoded_size=8,
-            hidden_dim=16,
-            out_dim=12,
-        )
-        coords = torch.tensor([[-122.4, 37.8], [2.35, 48.85]])
-        assert torch.allclose(loaded(coords), ref(coords), atol=1e-6)
-
-        bad_pth = tmp_path / 'bad.pth'
-        torch.save({'other.weight': torch.zeros((2, 2))}, bad_pth)
-        with pytest.raises(KeyError, match='LocEnc0'):
-            GAIRLocationEncoder(
-                checkpoint=bad_pth,
-                sigma=(1.0,),
-                encoded_size=4,
-                hidden_dim=8,
-                out_dim=4,
-            )
-
     @pytest.mark.parametrize('batch_size', [1, 7])
     def test_factories_and_weights(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, batch_size: int

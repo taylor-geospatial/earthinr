@@ -29,8 +29,8 @@ from .metrics import (
 )
 from .spatial import idw_probe_score, kriging_probe_score
 from .splits import (
+    BUNDLED_CITIES15000_PATH,
     EARTH_RADIUS_KM,
-    GEONAMES_CITIES15000_URL,
     RANDOM_FOLD_ALGORITHM,
     buffered_exclusion_mask,
     load_geonames_cities,
@@ -40,10 +40,10 @@ from .splits import (
 )
 
 __all__ = (
+    'BUNDLED_CITIES15000_PATH',
     'CHUNK_GAMMAS',
     'DEFAULT_LOGREG_CS',
     'EARTH_RADIUS_KM',
-    'GEONAMES_CITIES15000_URL',
     'MRL_BOUNDARIES',
     'RANDOM_FOLD_ALGORITHM',
     'RIDGE_ALPHAS',

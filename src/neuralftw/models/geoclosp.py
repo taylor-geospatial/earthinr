@@ -4,7 +4,6 @@
 """GeoCLOSP-RN spherical-harmonic SIREN location encoder."""
 
 import os
-import pathlib
 from typing import Any
 
 import torch
@@ -162,7 +161,7 @@ class GeoCLOSPLocationEncoder(LocationEncoder):
     @staticmethod
     def _load_checkpoint(path: Path) -> dict[str, Tensor]:
         """Load a local safetensors or PyTorch checkpoint payload."""
-        if pathlib.Path(path).suffix == '.safetensors':
+        if os.path.splitext(os.fspath(path))[1] == '.safetensors':
             return load_safetensors(path, device='cpu')
         payload = torch.load(os.fspath(path), map_location='cpu', weights_only=True)
         if isinstance(payload, dict) and 'state_dict' in payload:

@@ -3,8 +3,7 @@
 
 """Intrinsic dimension and participation ratio analysis for location embeddings."""
 
-from collections.abc import Generator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -37,48 +36,6 @@ def _to_float64_2d(
             'embeddings must be a 2D array with at least 2 samples and 1 feature.'
         )
     return arr
-
-
-@contextmanager
-def _exact_float64_knn(torchid_mod: Any) -> Generator[None]:
-    """Force pure-PyTorch float64 k-NN inside ``torchid`` to avoid float32 cancellation.
-
-    On Linux CPU, ``torchid`` dispatches k-NN queries to float32 ``faiss.IndexFlatL2``
-    regardless of tensor dtype. For large-norm embeddings whose neighbor spacing is
-    much smaller than the vector norm, float32 squared distances can cancel to zero
-    and cause distance-based estimators (such as TwoNN) to return ``nan``.
-    """
-    primitives = getattr(torchid_mod, 'primitives', None)
-    knn_torch = getattr(primitives, '_knn_torch', None)
-    if primitives is None or knn_torch is None:
-        yield
-        return
-
-    def _exact_knn(
-        x: Tensor,
-        k: int,
-        *,
-        chunk: int = 4096,
-        include_self: bool = False,
-        Y: Tensor | None = None,  # noqa: N803
-    ) -> tuple[Tensor, Tensor]:
-        return knn_torch(x, k, Y=Y, include_self=include_self, chunk=chunk)
-
-    targets: list[Any] = [primitives]
-    estimators_pkg = getattr(torchid_mod, 'estimators', None)
-    for mod_name in ('mle', 'mom', 'tle', 'twonn'):
-        submod = getattr(estimators_pkg, mod_name, None)
-        if submod is not None and hasattr(submod, 'knn'):
-            targets.append(submod)
-
-    originals = [(mod, mod.knn) for mod in targets]
-    for mod in targets:
-        mod.knn = _exact_knn
-    try:
-        yield
-    finally:
-        for mod, orig in originals:
-            mod.knn = orig
 
 
 def generate_equal_area_grid(
@@ -231,8 +188,7 @@ def estimate_intrinsic_dimension(
 
     Always computes the pure-NumPy float64 covariance participation ratio (``'pr'``).
     When *estimators* is non-empty, lazily imports ``torchid`` and evaluates each
-    requested estimator on float64 centered embeddings using exact pure-PyTorch k-NN
-    to prevent float32 distance cancellation on large-norm embeddings.
+    requested estimator on float64 centered embeddings.
 
     Args:
         embeddings: 2D array or PyTorch tensor of shape ``(N, D)`` with ``N >= 2``.
@@ -299,19 +255,18 @@ def estimate_intrinsic_dimension(
     tensor = torch.from_numpy(centered).to(device=resolved, dtype=torch.float64)
     est_mod = torchid_mod.estimators
 
-    with _exact_float64_knn(torchid_mod):
-        for key in normalized:
-            if key == 'mle':
-                est = est_mod.MLE().fit(tensor, n_neighbors=k)
-            elif key == 'twonn':
-                est = est_mod.TwoNN().fit(tensor)
-            elif key == 'mom':
-                est = est_mod.MOM(n_neighbors=k).fit(tensor)
-            elif key == 'tle':
-                est = est_mod.TLE(n_neighbors=k).fit(tensor)
-            else:
-                est = est_mod.FisherS(conditional_number=conditional_number).fit(tensor)
-            results[key] = float(est.dimension_)
+    for key in normalized:
+        if key == 'mle':
+            est = est_mod.MLE().fit(tensor, n_neighbors=k)
+        elif key == 'twonn':
+            est = est_mod.TwoNN().fit(tensor)
+        elif key == 'mom':
+            est = est_mod.MOM(n_neighbors=k).fit(tensor)
+        elif key == 'tle':
+            est = est_mod.TLE(n_neighbors=k).fit(tensor)
+        else:
+            est = est_mod.FisherS(conditional_number=conditional_number).fit(tensor)
+        results[key] = float(est.dimension_)
 
     return results
 

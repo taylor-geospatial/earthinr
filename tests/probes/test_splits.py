@@ -1,18 +1,15 @@
 # Copyright (c) Taylor Geospatial. All rights reserved.
 # Licensed under the MIT License.
 
-import io
-import os
 import pathlib
-import urllib.request
-import zipfile
-from typing import Self
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from neuralftw._errors import DatasetNotFoundError
 from neuralftw.probes.splits import (
+    BUNDLED_CITIES15000_PATH,
     RANDOM_FOLD_ALGORITHM,
     buffered_exclusion_mask,
     load_geonames_cities,
@@ -83,56 +80,37 @@ class TestLoadGeonamesCities:
             '2\tCityB\tCityB\t\t51.5074\t-0.1278\tP\tPPL\tGB\n'
         )
 
-    def test_load_existing_file(self, tmp_path: pathlib.Path) -> None:
+    def test_load_bundled_parquet(self) -> None:
+        assert pathlib.Path(BUNDLED_CITIES15000_PATH).is_file()
+        lats, lons = load_geonames_cities()
+        assert lats.ndim == 1
+        assert lons.ndim == 1
+        assert len(lats) == len(lons)
+        assert len(lats) > 25000
+        assert lats.dtype == np.float64
+        assert lons.dtype == np.float64
+
+    def test_load_custom_txt_and_parquet(self, tmp_path: pathlib.Path) -> None:
         txt = tmp_path / 'cities15000.txt'
         txt.write_text(self._sample_lines(), encoding='utf-8')
         lats, lons = load_geonames_cities(txt)
         np.testing.assert_allclose(lats, [37.7749, 51.5074])
         np.testing.assert_allclose(lons, [-122.4194, -0.1278])
 
-    def test_missing_file_raises_without_download(
-        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        missing = tmp_path / 'missing.txt'
-        with pytest.raises(DatasetNotFoundError, match=r'cities15000\.txt not found'):
-            load_geonames_cities(missing, download=False)
-
-        monkeypatch.setattr(os.path, 'expanduser', lambda _p: str(tmp_path))
-        with pytest.raises(DatasetNotFoundError, match=r'cities15000\.txt not found'):
-            load_geonames_cities(None, download=False)
-
-    def test_download_zip_offline_via_monkeypatch(
-        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, 'w') as zf:
-            zf.writestr('cities15000.txt', self._sample_lines())
-        payload = buf.getvalue()
-
-        class _FakeResp:
-            def __enter__(self) -> Self:
-                return self
-
-            def __exit__(self, *_args: object) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return payload
-
-        monkeypatch.setattr(
-            urllib.request, 'urlopen', lambda _url, timeout=120: _FakeResp()
+        pq = tmp_path / 'cities.parquet'
+        pd.DataFrame({'lat': [10.5, -20.25], 'lon': [30.0, -40.5]}).to_parquet(
+            pq, index=False
         )
-        nested = tmp_path / 'sub' / 'cities15000.txt'
-        lats, lons = load_geonames_cities(nested, download=True)
-        assert nested.is_file()
-        np.testing.assert_allclose(lats, [37.7749, 51.5074])
-        np.testing.assert_allclose(lons, [-122.4194, -0.1278])
+        p_lats, p_lons = load_geonames_cities(pq)
+        np.testing.assert_allclose(p_lats, [10.5, -20.25])
+        np.testing.assert_allclose(p_lons, [30.0, -40.5])
 
-        # Also test relative filename with empty dirname
-        monkeypatch.chdir(tmp_path)
-        lats2, lons2 = load_geonames_cities('local_cities.txt', download=True)
-        np.testing.assert_allclose(lats2, [37.7749, 51.5074])
-        np.testing.assert_allclose(lons2, [-122.4194, -0.1278])
+    def test_missing_file_raises(self, tmp_path: pathlib.Path) -> None:
+        missing = tmp_path / 'missing.txt'
+        with pytest.raises(
+            DatasetNotFoundError, match='GeoNames cities file not found'
+        ):
+            load_geonames_cities(missing)
 
 
 class TestUrbanRuralTags:

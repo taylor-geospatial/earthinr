@@ -1,15 +1,13 @@
 # Copyright (c) Taylor Geospatial. All rights reserved.
 # Licensed under the MIT License.
 
-from types import SimpleNamespace
-
 import numpy as np
 import pytest
 import torch
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
 
-from neuralftw._errors import DependencyNotFoundError
-from neuralftw.probes import classifiers as clf_mod
 from neuralftw.probes.classifiers import (
     LBFGSLogReg,
     knn_probe_score,
@@ -32,69 +30,34 @@ def _make_clf_data(
 
 
 class TestKNNProbeScore:
-    def test_sklearn_fallback_and_confusions(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_torch_knn_matches_sklearn_and_confusions(self) -> None:
         x, _, y_cls = _make_clf_data()
-
-        def _missing(_name: str, extra: str | None = None) -> object:
-            raise DependencyNotFoundError(f'missing {extra}')
-
-        monkeypatch.setattr(clf_mod, 'lazy_import', _missing)
 
         cms: list[np.ndarray] = []
         score, fold_scores = knn_probe_score(
-            x, y_cls, k=5, folds=3, seed=0, confusions=cms
+            x, y_cls, k=5, folds=3, seed=0, confusions=cms, chunk_size=12
         )
         assert 0.5 < score <= 1.0
         assert len(fold_scores) == 3
         assert len(cms) == 3
 
-        # test_mask path without confusions
+        # test_mask path matches scikit-learn KNeighborsClassifier exactly
         tm = np.arange(len(x)) >= 60
-        s_tm, f_tm = knn_probe_score(x, y_cls, k=3, test_mask=tm)
-        assert 0.5 < s_tm <= 1.0
+        s_tm, f_tm = knn_probe_score(x, y_cls, k=3, test_mask=tm, chunk_size=10)
+        scaler = StandardScaler().fit(x[~tm])
+        ref_clf = KNeighborsClassifier(n_neighbors=3, metric='euclidean').fit(
+            scaler.transform(x[~tm]), y_cls[~tm]
+        )
+        ref_acc = float(np.mean(ref_clf.predict(scaler.transform(x[tm])) == y_cls[tm]))
+        assert s_tm == pytest.approx(ref_acc)
         assert len(f_tm) == 1
-
-    def test_faissknn_branch_via_monkeypatch(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        x, _, y_cls = _make_clf_data(n=60)
-        seen_devices: list[str] = []
-
-        class _FakeFaissKNN:
-            def __init__(
-                self, n_neighbors: int, n_classes: int, device: str, metric: str
-            ) -> None:
-                assert n_neighbors >= 1
-                assert n_classes == 3
-                assert metric == 'l2'
-                seen_devices.append(device)
-                self._x: np.ndarray | None = None
-                self._y: np.ndarray | None = None
-
-            def fit(self, x_tr: np.ndarray, y_tr: np.ndarray) -> '_FakeFaissKNN':
-                self._x = x_tr
-                self._y = y_tr
-                return self
-
-            def predict(self, x_te: np.ndarray) -> np.ndarray:
-                assert self._x is not None
-                assert self._y is not None
-                d2 = ((x_te[:, None, :] - self._x[None, :, :]) ** 2).sum(axis=2)
-                return self._y[d2.argmin(axis=1)]
-
-        fake_mod = SimpleNamespace(FaissKNNClassifier=_FakeFaissKNN)
-        monkeypatch.setattr(clf_mod, 'lazy_import', lambda _n, extra=None: fake_mod)
-        score, folds = knn_probe_score(x, y_cls, k=3, folds=3, device='cpu')
-        assert 0.5 < score <= 1.0
-        assert len(folds) == 3
-        assert seen_devices == ['cpu', 'cpu', 'cpu']
 
     def test_validation_errors(self) -> None:
         x, _, y_cls = _make_clf_data(n=10)
         with pytest.raises(ValueError, match='k must be at least 1'):
             knn_probe_score(x, y_cls, k=0)
+        with pytest.raises(ValueError, match='chunk_size must be at least 1'):
+            knn_probe_score(x, y_cls, k=3, chunk_size=0)
         with pytest.raises(ValueError, match='at least 2 valid samples'):
             knn_probe_score(np.full((4, 2), np.nan), np.array([0, 1, 0, 1]))
 

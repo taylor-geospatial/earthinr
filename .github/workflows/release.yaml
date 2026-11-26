@@ -22,8 +22,22 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
 
+      - name: Verify release tag matches package version
+        run: |
+          python3 - <<'PY'
+          import os, tomllib
+          with open('pyproject.toml', 'rb') as f:
+              pkg_ver = tomllib.load(f)['project']['version']
+          tag = os.environ['GITHUB_REF_NAME'].lstrip('v')
+          assert tag == pkg_ver, f'Release tag {tag!r} != pyproject.toml version {pkg_ver!r}'
+          print(f'Verified release tag matches version {pkg_ver}')
+          PY
+
       - name: Build distributions
         run: uv build
+
+      - name: Validate distributions with twine
+        run: uvx twine check dist/*
 
       - name: Publish to PyPI
         run: uv publish

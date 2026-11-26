@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.8"]
+requires = ["uv_build>=0.8,<0.14"]
 build-backend = "uv_build"
 
 [project]
@@ -9,10 +9,30 @@ description = "Implicit Neural Representations for Earth Observation."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 authors = [
     { name = "Isaac Corley", email = "isaac.a.corley@gmail.com" },
     { name = "Taylor Geospatial" },
+]
+keywords = [
+    "coordbench",
+    "earth-observation",
+    "geospatial",
+    "implicit-neural-representations",
+    "location-encoder",
+    "pytorch",
+    "remote-sensing",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Typing :: Typed",
 ]
 dependencies = [
     # filelock 3.13+ required for cross-process atomic result file locking
@@ -21,23 +41,37 @@ dependencies = [
     "huggingface-hub>=0.23",
     # lazy-loader 0.4+ required for attach_stub deferred subpackage imports
     "lazy-loader>=0.4",
-    # numpy 1.26+ required for modern Generator API and Python 3.12+ wheels
-    "numpy>=1.26",
-    # pandas 2.1+ required for PyArrow-backed parquet benchmark tables
-    "pandas>=2.1",
-    # pyarrow 15+ required for reading CoordBench parquet files
-    "pyarrow>=15",
+    # matplotlib 3.8+ required for embedding map plotting helper
+    "matplotlib>=3.8",
+    # numpy 2.1+ required for Python 3.13+ wheels and modern Generator API
+    "numpy>=2.1",
+    # onnxruntime 1.18+ required for ONNX Runtime inference backend
+    "onnxruntime>=1.18",
+    # pandas 2.2+ required for Python 3.13+ PyArrow-backed parquet benchmark tables
+    "pandas>=2.2",
+    # pyarrow 18+ required for Python 3.13+ CoordBench and bundled GeoNames parquet files
+    "pyarrow>=18",
     # pyyaml 6+ required for SafeLoader YAML configuration parsing
     "pyyaml>=6",
     # safetensors 0.4+ required for zero-copy PyTorch tensor checkpoint loading
     "safetensors>=0.4",
-    # scikit-learn 1.4+ required for probe baselines and spatial/stratified splitting
-    "scikit-learn>=1.4",
-    # scipy 1.11+ required for spatial KDTree queries and spherical harmonic verification
-    "scipy>=1.11",
-    # torch 2.2+ required for Python 3.12+ wheels and stable inference_mode/linalg APIs
-    "torch>=2.2",
+    # scikit-learn 1.5+ required for Python 3.13+ probe baselines and spatial splitting
+    "scikit-learn>=1.5",
+    # scipy 1.14+ required for Python 3.13+ spatial KDTree queries and spherical harmonics
+    "scipy>=1.14",
+    # torch 2.5+ required for Python 3.13+ wheels and stable inference_mode/linalg APIs
+    "torch>=2.5",
+    # torchid 0.6.0+ required for pure-PyTorch intrinsic dimension estimators
+    "torchid>=0.6.0",
 ]
+
+[project.urls]
+Homepage = "https://research.taylorgeospatial.org/neuralftw/"
+Repository = "https://github.com/taylor-geospatial/neuralftw"
+Issues = "https://github.com/taylor-geospatial/neuralftw/issues"
+"Model Zoo" = "https://huggingface.co/taylor-geospatial/neuralftw-zoo"
+Leaderboard = "https://research.taylorgeospatial.org/neuralftw/"
+"Live Demo" = "https://research.taylorgeospatial.org/neuralftw/demo.html"
 
 [project.optional-dependencies]
 products = [
@@ -52,16 +86,8 @@ products = [
     # zarr 3+ required for AlphaEarth and TESSERA v1.1 Zarr embedding stores
     "zarr>=3",
 ]
-knn = [
-    # faissknn 0.4.2+ required for optional FAISS-accelerated k-NN probing
-    "faissknn>=0.4.2",
-]
-onnx = [
-    # onnxruntime 1.18+ required for ONNX Runtime inference backend
-    "onnxruntime>=1.18",
-]
 style = [
-    # ruff 0.14+ required for CPY copyright checks and modern Python 3.12 lint rules
+    # ruff 0.14+ required for CPY copyright checks and modern Python 3.13 lint rules
     "ruff>=0.14",
     # ty 0.0.1a23+ required for static type checking across src and tests
     "ty>=0.0.1a23",
@@ -75,7 +101,7 @@ tests = [
     "pytest-socket>=0.7",
 ]
 all = [
-    "neuralftw[products,knn,onnx,style,tests]",
+    "neuralftw[products,style,tests]",
 ]
 
 [project.scripts]

@@ -1069,9 +1069,7 @@ def run_coordbench(
     cities_lat: NDArray[np.float64] | None = None
     cities_lon: NDArray[np.float64] | None = None
     if cfg.evaluation.split in {'urban_rural_stratified', 'urban_rural_holdout'}:
-        cities_lat, cities_lon = load_geonames_cities(
-            cfg.evaluation.cities_path, download=cfg.evaluation.cities_path is None
-        )
+        cities_lat, cities_lon = load_geonames_cities(cfg.evaluation.cities_path)
 
     all_results: list[CoordResult] = []
     for bench in benchmarks:

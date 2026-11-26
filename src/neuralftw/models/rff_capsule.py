@@ -5,7 +5,6 @@
 
 import math
 import os
-import pathlib
 from collections.abc import Sequence
 from typing import Any, cast
 
@@ -17,27 +16,6 @@ from ._base import LocationEncoder, Weights, WeightsEnum
 from ._utils import equal_earth_projection, load_safetensors
 
 _ZOO_REPO = 'taylor-geospatial/neuralftw-zoo'
-
-
-def _extract_gair_state_dict(payload: dict[str, Any]) -> dict[str, Tensor]:
-    """Extract ``LocEnc*`` tensors from a legacy GAIR ``.pth`` checkpoint."""
-    state: dict[str, Any] = payload
-    for key in ('state_dict', 'model', 'model_state_dict'):
-        if key in state and isinstance(state[key], dict):
-            state = state[key]
-            break
-
-    marker = next((k for k in state if 'LocEnc0.capsule.1.weight' in k), None)
-    if marker is None:
-        raise KeyError(
-            "Could not locate 'LocEnc0.capsule.1.weight' in GAIR checkpoint."
-        )
-    prefix = marker.split('LocEnc0', 1)[0]
-    return {
-        k[len(prefix) :]: v
-        for k, v in state.items()
-        if k.startswith(prefix) and k[len(prefix) :].startswith('LocEnc')
-    }
 
 
 class GaussianEncoding(nn.Module):
@@ -212,7 +190,6 @@ class _RFFCapsuleLocationEncoder(LocationEncoder):
     _default_hidden_dim: int
     _default_out_dim: int
     _native_coord_order: CoordOrder
-    _allow_legacy_pth: bool = False
 
     def __init__(
         self,
@@ -230,7 +207,7 @@ class _RFFCapsuleLocationEncoder(LocationEncoder):
 
         Args:
             weights: Pretrained weights enum member or member name string.
-            checkpoint: Local checkpoint path (``.safetensors`` or GAIR ``.pth``).
+            checkpoint: Local ``.safetensors`` checkpoint path.
             sigma: Optional override sequence of RFF scales.
             encoded_size: Optional override number of RFF frequency pairs.
             hidden_dim: Optional override hidden MLP width.
@@ -262,17 +239,11 @@ class _RFFCapsuleLocationEncoder(LocationEncoder):
             res_out = int(meta['output_dim'])
             raw_state = load_safetensors(resolved.download(), device='cpu')
         elif checkpoint is not None:
-            if pathlib.Path(checkpoint).suffix == '.safetensors':
-                raw_state = load_safetensors(checkpoint, device='cpu')
-            elif self._allow_legacy_pth:
-                payload = torch.load(
-                    os.fspath(checkpoint), map_location='cpu', weights_only=False
-                )
-                raw_state = _extract_gair_state_dict(payload)
-            else:
+            if os.path.splitext(os.fspath(checkpoint))[1] != '.safetensors':
                 raise ValueError(
                     f'Expected a .safetensors checkpoint, got {os.fspath(checkpoint)!r}.'
                 )
+            raw_state = load_safetensors(checkpoint, device='cpu')
 
         self.embed_dim = res_out
         self.encoder = EqualEarthRFFEncoder(
@@ -523,7 +494,6 @@ class GAIRLocationEncoder(_RFFCapsuleLocationEncoder):
     _default_hidden_dim = 1024
     _default_out_dim = 768
     _native_coord_order: CoordOrder = 'lonlat'
-    _allow_legacy_pth: bool = True
 
 
 def gair(

@@ -28,7 +28,9 @@ from neuralftw.models.registry import (
     get_model,
     get_model_preset,
     list_models,
+    register_model,
     resolve_model_preset,
+    unregister_model,
 )
 
 EXPECTED_PRESETS: tuple[str, ...] = (
@@ -358,9 +360,77 @@ class TestPackagedPresets:
         with pytest.raises(ValueError, match='Unsupported backend'):
             get_model('sinr', backend=bad_backend)
 
+    def test_register_and_unregister_custom_models(self) -> None:
+        import torch
+        from torch import Tensor
+
+        @register_model('test-custom-dec', description='Decorator custom encoder')
+        class _DecoratedEncoder(LocationEncoder):
+            name = 'test-custom-dec'
+            embed_dim = 2
+
+            def __init__(self, scale: float = 1.0, device: str = 'cpu') -> None:
+                super().__init__(device=device)
+                self.scale = scale
+
+            def forward(
+                self,
+                coords: Tensor,
+                year: Tensor | None = None,
+                month: Tensor | None = None,
+            ) -> Tensor:
+                return coords.to(torch.float32) * self.scale
+
+        try:
+            assert 'test-custom-dec' in list_models()
+            preset = get_model_preset('test-custom-dec')
+            assert preset.description == 'Decorator custom encoder'
+            enc = get_model('test-custom-dec', scale=2.0)
+            assert isinstance(enc, _DecoratedEncoder)
+            out = enc(torch.tensor([[1.0, 2.0]]))
+            assert torch.allclose(out, torch.tensor([[2.0, 4.0]]))
+
+            # Duplicate registration rejected without overwrite=True
+            with pytest.raises(ConfigError, match='already registered'):
+                register_model('test-custom-dec', _DecoratedEncoder)
+
+            # Overwrite with dotted string target replaces factory cleanly
+            register_model(
+                'test-custom-dec',
+                'neuralftw.models.encoders.XYZLocationEncoder',
+                kwargs={'batch_size': 16},
+                overwrite=True,
+            )
+            enc2 = get_model('test-custom-dec')
+            assert enc2.embed_dim == 3
+            assert enc2.batch_size == 16
+
+            # Invalid target types
+            bad_target: Any = 123
+            with pytest.raises(ConfigError, match='callable or dotted Python path'):
+                register_model('test-bad-target', bad_target)
+
+            class _BadCallable:
+                def __call__(self) -> LocationEncoder:
+                    return get_model('xyz')
+
+            with pytest.raises(ConfigError, match='__module__ and __name__'):
+                register_model('test-bad-callable', _BadCallable())
+        finally:
+            unregister_model('test-custom-dec')
+
+        assert 'test-custom-dec' not in list_models()
+        with pytest.raises(ConfigError, match='No custom model preset'):
+            unregister_model('test-custom-dec')
+
     def test_lazy_top_level_exports(self) -> None:
         assert neuralftw.__version__ == '0.1.0'
         assert neuralftw.ConfigError is ConfigError
+        assert neuralftw.LocationEncoder is LocationEncoder
+        assert neuralftw.get_model is get_model
+        assert neuralftw.list_models is list_models
+        assert neuralftw.register_model is register_model
+        assert neuralftw.unregister_model is unregister_model
         assert neuralftw.models.XYZLocationEncoder is not None
         assert neuralftw.models.ONNXLocationEncoder is ONNXLocationEncoder
         assert neuralftw.models.ONNX_PRESET_SPECS is ONNX_PRESET_SPECS
