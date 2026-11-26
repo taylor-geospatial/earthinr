@@ -11,7 +11,7 @@ import torch
 from numpy.typing import NDArray
 from torch import Tensor
 
-from .._utils import lazy_import, resolve_device
+from .._utils import float64_dtype, lazy_import, resolve_device
 from .variogram import EARTH_RADIUS_KM
 
 if TYPE_CHECKING:
@@ -252,7 +252,9 @@ def estimate_intrinsic_dimension(
     torchid_mod = lazy_import('torchid')
     resolved = resolve_device(device)
     centered = work - work.mean(axis=0, keepdims=True)
-    tensor = torch.from_numpy(centered).to(device=resolved, dtype=torch.float64)
+    tensor = torch.from_numpy(centered).to(
+        device=resolved, dtype=float64_dtype(resolved)
+    )
     est_mod = torchid_mod.estimators
 
     for key in normalized:

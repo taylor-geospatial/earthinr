@@ -9,6 +9,7 @@ import torch
 from torch import Tensor
 
 from .._types import Path
+from .._utils import float64_dtype
 from ._base import LocationEncoder, Weights, WeightsEnum
 from ._utils import load_safetensors
 from .satclip import (
@@ -152,7 +153,7 @@ class OSMGraphCLIPLocationEncoder(LocationEncoder):
         self.embed_dim = embed_dim
         self.posenc = StableAnalyticSphericalHarmonics(
             legendre_polys=legendre_polys,
-            compute_dtype=torch.float64,
+            compute_dtype=float64_dtype(self.device),
             output_dtype=torch.float32,
         )
         self.nnet = SirenNet(

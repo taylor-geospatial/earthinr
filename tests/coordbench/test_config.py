@@ -82,6 +82,7 @@ class TestConfigClasses:
         assert ev.cities_path == '/tmp/cities15000.txt'
 
         assert CoordEvaluationConfig(knn_device='cuda').knn_device == 'cuda'
+        assert CoordEvaluationConfig(knn_device='mps').knn_device == 'mps'
 
         bad_cases: list[dict[str, Any]] = [
             {'methods': 'linear'},
@@ -103,7 +104,7 @@ class TestConfigClasses:
             {'knn_k': 0},
             {'knn_k': True},
             {'knn_device': 'auto'},
-            {'knn_device': 'mps'},
+            {'knn_device': 'tpu'},
             {'knn_device': 'cuda:-1'},
             {'respect_official_splits': 'true'},
             {'cities_path': '   '},

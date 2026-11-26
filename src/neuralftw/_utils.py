@@ -90,4 +90,14 @@ def resolve_device(device: str | torch.device = 'cpu') -> torch.device:
     return resolved
 
 
-__all__ = ('lazy_import', 'resolve_device')
+def float64_dtype(device: torch.device) -> torch.dtype:
+    """Return ``torch.float32`` on MPS (no float64 support) and ``torch.float64`` elsewhere."""
+    return torch.float32 if device.type == 'mps' else torch.float64
+
+
+def float64_device(device: torch.device) -> torch.device:
+    """Return CPU when *device* is MPS (no float64 support), otherwise *device*."""
+    return torch.device('cpu') if device.type == 'mps' else device
+
+
+__all__ = ('float64_device', 'float64_dtype', 'lazy_import', 'resolve_device')

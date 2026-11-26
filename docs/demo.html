@@ -622,7 +622,7 @@
             <option value="osmgraphclip-ms-l40">osmgraphclip-ms-l40 (6.0 MB)</option>
             <option value="osmgraphclip-a-l40">osmgraphclip-a-l40 (6.0 MB)</option>
             <option value="tte">tte (13.1 MB)</option>
-            <option value="climplicit">climplicit (16.2 MB)</option>
+            <option value="climplicit">climplicit (15.7 MB)</option>
           </optgroup>
           <optgroup label="Large (RFF Capsules)">
             <option value="gtloc">gtloc (36.2 MB)</option>
@@ -646,6 +646,25 @@
           <option value="fp16">FP16 (1.1 MB)</option>
           <option value="int8">INT8 (0.6 MB)</option>
           <option value="int4">INT4 (0.38 MB)</option>
+        </select>
+      </div>
+
+      <div class="field" id="month-field" hidden>
+        <label for="month-select">Month</label>
+        <select id="month-select">
+          <option value="all" selected>All 4 (Mar/Jun/Sep/Dec)</option>
+          <option value="1">Jan (1)</option>
+          <option value="2">Feb (2)</option>
+          <option value="3">Mar (3)</option>
+          <option value="4">Apr (4)</option>
+          <option value="5">May (5)</option>
+          <option value="6">Jun (6)</option>
+          <option value="7">Jul (7)</option>
+          <option value="8">Aug (8)</option>
+          <option value="9">Sep (9)</option>
+          <option value="10">Oct (10)</option>
+          <option value="11">Nov (11)</option>
+          <option value="12">Dec (12)</option>
         </select>
       </div>
 
@@ -765,7 +784,12 @@
         'osmgraphclip-ms-l40': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 6.0, fp16: 5.0, int8: 4.7, int4: 4.5 } },
         'osmgraphclip-a-l40': { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 6.0, fp16: 5.0, int8: 4.7, int4: 4.5 } },
         tte: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 13.1, fp16: 9.7, int8: 8.0, int4: 7.4 } },
-        climplicit: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 16.2, fp16: 8.2, int8: 4.5, int4: 2.9 } },
+        climplicit: {
+          precisions: ALL_PRECISIONS,
+          defaultPrecision: 'fp32',
+          sizes: { fp32: 15.7, fp16: 7.9, int8: 4.2, int4: 2.6 },
+          acceptsMonth: true,
+        },
         gtloc: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 36.2, fp16: 18.1, int8: 9.5, int4: 5.9 } },
         geoclip: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 36.2, fp16: 18.1, int8: 9.5, int4: 5.9 } },
         taxabind: { precisions: ALL_PRECISIONS, defaultPrecision: 'fp32', sizes: { fp32: 36.2, fp16: 18.1, int8: 9.5, int4: 5.9 } },
@@ -825,6 +849,7 @@
           cacheKey: relPath,
           sliceDim: entry.sliceDim || null,
           chunkSize: entry.chunkSize || null,
+          acceptsMonth: Boolean(entry.acceptsMonth),
         };
       }
 
@@ -910,7 +935,26 @@
 
       const modelSelect = document.getElementById('model-select');
       const precisionSelect = document.getElementById('precision-select');
+      const monthField = document.getElementById('month-field');
+      const monthSelect = document.getElementById('month-select');
       const gridSelect = document.getElementById('grid-select');
+
+      const DEFAULT_CLIMPLICIT_MONTHS = [3, 6, 9, 12];
+      const MONTH_SHORT_LABELS = {
+        all: 'Mar/Jun/Sep/Dec',
+        '1': 'Jan',
+        '2': 'Feb',
+        '3': 'Mar',
+        '4': 'Apr',
+        '5': 'May',
+        '6': 'Jun',
+        '7': 'Jul',
+        '8': 'Aug',
+        '9': 'Sep',
+        '10': 'Oct',
+        '11': 'Nov',
+        '12': 'Dec',
+      };
       const viewSelect = document.getElementById('view-select');
       const refitBtn = document.getElementById('refit-btn');
       const coastlinesToggle = document.getElementById('coastlines-toggle');
@@ -958,6 +1002,7 @@
         lastDownloadMs: 0,
         lastModelId: '',
         lastPrecisionLabel: 'FP32',
+        lastMonthLabel: '',
         deckInstance: null,
       };
 
@@ -1001,6 +1046,9 @@
           precisionSelect.appendChild(opt);
         }
         precisionSelect.value = effPrec;
+        if (monthField) {
+          monthField.hidden = !entry.acceptsMonth;
+        }
         syncModelDropdownLabels(effPrec);
         return effPrec;
       }
@@ -1220,54 +1268,81 @@
         return modelCfg.chunkSize[provider] || defaultSize;
       }
 
-      async function runChunkedInference(session, coords, count, runId, modelCfg, provider) {
+      async function runChunkedInference(session, coords, count, runId, modelCfg, provider, monthValue) {
         const inputName = session.inputNames[0];
         const outputName = session.outputNames[0];
         const chunkSize = resolveChunkSize(modelCfg, provider);
         const totalChunks = Math.ceil(count / chunkSize);
         const sliceDim = modelCfg && modelCfg.sliceDim ? modelCfg.sliceDim : 0;
 
+        const needsMonth = Boolean(modelCfg && modelCfg.acceptsMonth) || session.inputNames.length >= 2;
+        const monthInputName = needsMonth
+          ? (session.inputNames.includes('month') ? 'month' : session.inputNames[1])
+          : null;
+        const monthsToRun = !needsMonth
+          ? [null]
+          : !monthValue || monthValue === 'all'
+            ? DEFAULT_CLIMPLICIT_MONTHS
+            : [Number(monthValue)];
+        const numPasses = monthsToRun.length;
+        const totalSteps = totalChunks * numPasses;
+
         let embeddings = null;
         let embedDim = 0;
 
-        for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
-          if (runId !== state.runId) return null;
+        for (let mIdx = 0; mIdx < numPasses; mIdx++) {
+          const monthVal = monthsToRun[mIdx];
+          for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+            if (runId !== state.runId) return null;
 
-          const start = chunkIdx * chunkSize;
-          const end = Math.min(start + chunkSize, count);
-          const batchLen = end - start;
-          const slice = coords.subarray(start * 2, end * 2);
+            const start = chunkIdx * chunkSize;
+            const end = Math.min(start + chunkSize, count);
+            const batchLen = end - start;
+            const slice = coords.subarray(start * 2, end * 2);
 
-          const inputTensor = new ort.Tensor('float32', slice, [batchLen, 2]);
-          const runPromise = session.run({ [inputName]: inputTensor });
-          inFlightInference = runPromise.catch(() => {});
-          const results = await runPromise;
-          const outTensor = results[outputName];
-          const outData = outTensor.data;
-          const rawDim = outTensor.dims[outTensor.dims.length - 1];
-          const targetDim = sliceDim > 0 ? Math.min(sliceDim, rawDim) : rawDim;
-
-          if (!embeddings) {
-            embedDim = targetDim;
-            embeddings = new Float32Array(count * embedDim);
-          }
-
-          if (targetDim === rawDim) {
-            embeddings.set(outData, start * embedDim);
-          } else {
-            for (let r = 0; r < batchLen; r++) {
-              const srcOff = r * rawDim;
-              const dstOff = (start + r) * embedDim;
-              embeddings.set(outData.subarray(srcOff, srcOff + targetDim), dstOff);
+            const inputTensor = new ort.Tensor('float32', slice, [batchLen, 2]);
+            const feeds = { [inputName]: inputTensor };
+            let monthTensor = null;
+            if (needsMonth) {
+              const monthBuf = new Float32Array(batchLen);
+              monthBuf.fill(monthVal);
+              monthTensor = new ort.Tensor('float32', monthBuf, [batchLen]);
+              feeds[monthInputName] = monthTensor;
             }
-          }
 
-          if (typeof outTensor.dispose === 'function') outTensor.dispose();
-          if (typeof inputTensor.dispose === 'function') inputTensor.dispose();
+            const runPromise = session.run(feeds);
+            inFlightInference = runPromise.catch(() => {});
+            const results = await runPromise;
+            const outTensor = results[outputName];
+            const outData = outTensor.data;
+            const rawDim = outTensor.dims[outTensor.dims.length - 1];
+            const passDim = sliceDim > 0 ? Math.min(sliceDim, rawDim) : rawDim;
 
-          if (chunkIdx % 2 === 0 || chunkIdx === totalChunks - 1) {
-            setStatus('Inference ' + (chunkIdx + 1) + ' / ' + totalChunks + ' chunks');
-            await yieldToBrowser();
+            if (!embeddings) {
+              embedDim = passDim * numPasses;
+              embeddings = new Float32Array(count * embedDim);
+            }
+
+            if (numPasses === 1 && passDim === rawDim) {
+              embeddings.set(outData, start * embedDim);
+            } else {
+              const passColOffset = mIdx * passDim;
+              for (let r = 0; r < batchLen; r++) {
+                const srcOff = r * rawDim;
+                const dstOff = (start + r) * embedDim + passColOffset;
+                embeddings.set(outData.subarray(srcOff, srcOff + passDim), dstOff);
+              }
+            }
+
+            if (typeof outTensor.dispose === 'function') outTensor.dispose();
+            if (typeof inputTensor.dispose === 'function') inputTensor.dispose();
+            if (monthTensor && typeof monthTensor.dispose === 'function') monthTensor.dispose();
+
+            const stepDone = mIdx * totalChunks + chunkIdx + 1;
+            if (stepDone % 2 === 1 || stepDone === totalSteps) {
+              setStatus('Inference ' + stepDone + ' / ' + totalSteps + ' chunks');
+              await yieldToBrowser();
+            }
           }
         }
 
@@ -1957,11 +2032,13 @@
           ' ms · view ' +
           Math.round(viewMs) +
           ' ms';
+        const monthSuffix = state.lastMonthLabel ? ' · ' + state.lastMonthLabel : '';
         setStatus(
           'Ready (' +
             state.lastModelId +
             ' · ' +
             state.lastPrecisionLabel +
+            monthSuffix +
             ', D=' +
             state.embedDim +
             ' · ' +
@@ -2157,6 +2234,7 @@
         }
         const modelId = modelSelect.value;
         const precision = precisionSelect.value;
+        const monthValue = monthSelect ? monthSelect.value : 'all';
         const gridKm = Number(gridSelect.value);
 
         showError('');
@@ -2164,6 +2242,9 @@
 
         try {
           const modelCfg = getModelConfig(modelId, precision);
+          const monthLabel = modelCfg.acceptsMonth
+            ? MONTH_SHORT_LABELS[monthValue] || ('M' + monthValue)
+            : '';
           const { width, height, count, coords } = buildCoordGrid(gridKm);
           gridBadge.textContent = 'Grid: ' + width + ' × ' + height + ' (' + count.toLocaleString() + ')';
           setStatus('Loading ' + modelId + ' · ' + modelCfg.precisionLabel + '…');
@@ -2182,7 +2263,8 @@
               count,
               runId,
               modelCfg,
-              sessionEntry.provider
+              sessionEntry.provider,
+              monthValue
             );
           } catch (runErr) {
             if (sessionEntry.provider === 'webgpu') {
@@ -2197,7 +2279,8 @@
                 count,
                 runId,
                 modelCfg,
-                sessionEntry.provider
+                sessionEntry.provider,
+                monthValue
               );
             } else {
               throw runErr;
@@ -2223,6 +2306,7 @@
           state.lastDownloadMs = sessionEntry.downloadMs;
           state.lastModelId = modelId;
           state.lastPrecisionLabel = modelCfg.precisionLabel;
+          state.lastMonthLabel = monthLabel;
 
           applyCurrentView();
         } catch (err) {
@@ -2246,6 +2330,9 @@
         syncModelDropdownLabels(precisionSelect.value);
         runPipeline();
       });
+      if (monthSelect) {
+        monthSelect.addEventListener('change', runPipeline);
+      }
       gridSelect.addEventListener('change', runPipeline);
       viewSelect.addEventListener('change', () => {
         if (state.refitTimer !== null) {

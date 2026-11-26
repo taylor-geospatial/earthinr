@@ -24,7 +24,6 @@ VALID_SPLITS: frozenset[str] = frozenset(
 )
 
 _DEVICE_RE = re.compile(r'^(cpu|mps|cuda(?::[0-9]+)?)$')
-_KNN_DEVICE_RE = re.compile(r'^(cpu|cuda(?::[0-9]+)?)$')
 _MAX_SEED = 2**64 - 1
 
 
@@ -119,15 +118,13 @@ def _require_non_blank_str(value: Any, name: str) -> str:
 
 def _validate_device(value: Any, name: str, *, allow_auto: bool) -> str:
     device = _require_non_blank_str(value, name)
+    if _DEVICE_RE.fullmatch(device) or (allow_auto and device == 'auto'):
+        return device
     if allow_auto:
-        if device == 'auto' or _DEVICE_RE.fullmatch(device):
-            return device
         raise ConfigError(
             f"{name} must be 'auto', 'cpu', 'mps', 'cuda', or 'cuda:<index>'."
         )
-    if _KNN_DEVICE_RE.fullmatch(device):
-        return device
-    raise ConfigError(f"{name} must be 'cpu', 'cuda', or 'cuda:<index>'.")
+    raise ConfigError(f"{name} must be 'cpu', 'mps', 'cuda', or 'cuda:<index>'.")
 
 
 class CoordModelConfig:
@@ -210,11 +207,12 @@ class CoordEvaluationConfig:
             cell_deg: Positive grid-cell size in degrees or sequence of sizes for
                 sweeps.
             knn_k: Number of nearest neighbors for k-NN probing (>= 1).
-            knn_device: Execution device for k-NN probing (``'cpu'``, ``'cuda'``, or
-                ``'cuda:<index>'``).
+            knn_device: Execution device for k-NN probing (``'cpu'``, ``'mps'``,
+                ``'cuda'``, or ``'cuda:<index>'``).
             respect_official_splits: Whether official benchmark test masks override CV.
-            cities_path: Optional path to GeoNames ``cities15000.txt`` for urban/rural
-                splits.
+            cities_path: Optional custom GeoNames ``.parquet`` or ``cities15000.txt``
+                path for urban/rural splits (defaults to bundled
+                ``cities15000.parquet``).
             urban_km: Maximum distance to nearest city in km to classify as urban.
             rural_km: Minimum distance to nearest city in km to classify as rural
                 (must be strictly greater than *urban_km*).
