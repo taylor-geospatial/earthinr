@@ -5,7 +5,7 @@
 
 import os
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -17,9 +17,23 @@ from .._utils import lazy_import
 from ._base import LocationEncoder
 from ._utils import hf_download
 
+ONNXPrecision = Literal['fp32', 'fp16', 'int8', 'int4']
+
 _ZOO_REPO_ID = 'taylor-geospatial/neuralftw-zoo'
 
-#: Mapping from preset name to ``(repo_id, filename, embed_dim, accepts_year, default_year)``.
+_PRECISION_FILENAMES: dict[str, str] = {
+    'fp32': 'model.onnx',
+    'fp16': 'model_fp16.onnx',
+    'int8': 'model_int8.onnx',
+    'int4': 'model_int4_bs32.onnx',
+}
+
+_ALL_PRECISIONS: tuple[str, ...] = ('fp32', 'fp16', 'int8', 'int4')
+_FP32_ONLY: tuple[str, ...] = ('fp32',)
+_MIND_PRECISIONS: tuple[str, ...] = ('int8', 'int4')
+
+#: Mapping from preset name to
+#: ``(repo_id, filename, embed_dim, accepts_year, default_year)``.
 ONNX_PRESET_SPECS: dict[str, tuple[str, str, int, bool, int]] = {
     'satclip': (_ZOO_REPO_ID, 'satclip-vit16-l40/model.onnx', 256, False, 2020),
     'satclip-vit16-l10': (
@@ -95,7 +109,23 @@ ONNX_PRESET_SPECS: dict[str, tuple[str, str, int, bool, int]] = {
     'gtloc': (_ZOO_REPO_ID, 'gtloc/model.onnx', 512, False, 2020),
     'hydroloc': (_ZOO_REPO_ID, 'hydroloc/model.onnx', 512, False, 2020),
     'geoclosp': (_ZOO_REPO_ID, 'geoclosp-rn/model.onnx', 384, False, 2020),
+    'mind': (_ZOO_REPO_ID, 'mind/model_int8.onnx', 64, False, 2021),
+    'mind-3072': (_ZOO_REPO_ID, 'mind/model_int8.onnx', 3072, False, 2021),
 }
+
+#: Available quantized ONNX precisions per preset in ``taylor-geospatial/neuralftw-zoo``.
+ONNX_PRESET_PRECISIONS: dict[str, tuple[str, ...]] = {
+    preset: (
+        _MIND_PRECISIONS
+        if preset in {'mind', 'mind-3072'}
+        else _FP32_ONLY
+        if preset in {'terranova', 'terranova-st'}
+        else _ALL_PRECISIONS
+    )
+    for preset in ONNX_PRESET_SPECS
+}
+
+_PRESET_SLICE_DIMS: dict[str, int] = {'mind': 64}
 
 
 class ONNXLocationEncoder(LocationEncoder):
@@ -120,6 +150,7 @@ class ONNXLocationEncoder(LocationEncoder):
         repo_id: str | None = None,
         filename: str | None = None,
         embed_dim: int | None = None,
+        slice_dim: int | None = None,
         accepts_year: bool = False,
         default_year: int = 2020,
         providers: Sequence[str] | None = None,
@@ -133,8 +164,10 @@ class ONNXLocationEncoder(LocationEncoder):
             model_path: Local path to an exported ``.onnx`` model file.
             repo_id: HuggingFace Hub repository identifier containing the model.
             filename: File path of the ``.onnx`` model inside *repo_id*.
-            embed_dim: Output embedding dimensionality. Inferred from the ONNX
-                graph output shape when omitted.
+            embed_dim: Output embedding dimensionality. Inferred from *slice_dim*
+                or the ONNX graph output shape when omitted.
+            slice_dim: Optional leading Matryoshka prefix width sliced from the
+                ONNX graph output (e.g. ``64`` for ``mind``).
             accepts_year: Whether the ONNX graph expects a second ``year`` input.
             default_year: Default calendar year broadcast when *accepts_year* is
                 True and no *year* input is supplied.
@@ -148,10 +181,17 @@ class ONNXLocationEncoder(LocationEncoder):
         Raises:
             DependencyNotFoundError: If ``onnxruntime`` is not installed.
             ValueError: If neither *model_path* nor both *repo_id* and *filename*
-                are provided.
+                are provided, or if *slice_dim* is not positive.
         """
         super().__init__(device=device, batch_size=batch_size)
         ort = lazy_import('onnxruntime', extra='onnx')
+
+        if slice_dim is not None and (
+            isinstance(slice_dim, bool)
+            or not isinstance(slice_dim, int)
+            or slice_dim <= 0
+        ):
+            raise ValueError(f'slice_dim must be a positive int, got {slice_dim!r}.')
 
         if model_path is not None:
             resolved_path = os.fspath(model_path)
@@ -174,6 +214,7 @@ class ONNXLocationEncoder(LocationEncoder):
         )
         self.model_path = resolved_path
         self.providers = tuple(resolved_providers)
+        self.slice_dim = slice_dim
         self.accepts_year = accepts_year
         self.default_year = default_year
         self.name = name
@@ -183,7 +224,12 @@ class ONNXLocationEncoder(LocationEncoder):
         self._coords_name: str = inputs[0].name
         self._year_name: str = inputs[1].name if accepts_year else 'year'
         self._output_name: str = outputs[0].name
-        self.embed_dim = int(outputs[0].shape[-1]) if embed_dim is None else embed_dim
+        if embed_dim is not None:
+            self.embed_dim = embed_dim
+        elif slice_dim is not None:
+            self.embed_dim = slice_dim
+        else:
+            self.embed_dim = int(outputs[0].shape[-1])
 
     def _encode(
         self,
@@ -213,8 +259,12 @@ class ONNXLocationEncoder(LocationEncoder):
             else:
                 year_arr = np.asarray(year, dtype=np.float32)
             feed[self._year_name] = year_arr
-        out = self.session.run([self._output_name], feed)[0]
-        return np.asarray(out, dtype=np.float32)
+        out = np.asarray(
+            self.session.run([self._output_name], feed)[0], dtype=np.float32
+        )
+        if self.slice_dim is not None:
+            out = np.ascontiguousarray(out[:, : self.slice_dim])
+        return out
 
     def forward(
         self, coords: Tensor, year: Tensor | None = None, month: Tensor | None = None
@@ -243,7 +293,9 @@ class ONNXLocationEncoder(LocationEncoder):
 def onnx_encoder(
     preset_or_path: Path,
     *,
+    precision: ONNXPrecision | None = None,
     embed_dim: int | None = None,
+    slice_dim: int | None = None,
     accepts_year: bool | None = None,
     default_year: int | None = None,
     providers: Sequence[str] | None = None,
@@ -255,7 +307,12 @@ def onnx_encoder(
     Args:
         preset_or_path: Registered ONNX preset name (a key in
             :data:`ONNX_PRESET_SPECS`) or local path to an ``.onnx`` model file.
+        precision: Optional ONNX weight precision for zoo presets
+            (``'fp32'``, ``'fp16'``, ``'int8'``, or ``'int4'``). Defaults to
+            ``'fp32'`` for standard zoo models and ``'int8'`` for ``mind``
+            presets.
         embed_dim: Optional override for output embedding dimensionality.
+        slice_dim: Optional leading Matryoshka prefix width sliced from outputs.
         accepts_year: Optional override indicating whether the model accepts a
             ``year`` input tensor.
         default_year: Optional override for the default calendar year.
@@ -265,15 +322,34 @@ def onnx_encoder(
 
     Returns:
         Instantiated :class:`ONNXLocationEncoder`.
+
+    Raises:
+        ValueError: If *precision* is unsupported for *preset_or_path*.
     """
     if isinstance(preset_or_path, str) and preset_or_path in ONNX_PRESET_SPECS:
-        repo_id, filename, spec_dim, spec_accepts_year, spec_default_year = (
+        repo_id, default_filename, spec_dim, spec_accepts_year, spec_default_year = (
             ONNX_PRESET_SPECS[preset_or_path]
+        )
+        if precision is not None:
+            allowed = ONNX_PRESET_PRECISIONS[preset_or_path]
+            if precision not in allowed:
+                raise ValueError(
+                    f'Precision {precision!r} is not available for ONNX preset '
+                    f'{preset_or_path!r}. Available precisions: {", ".join(allowed)}.'
+                )
+            model_dir = default_filename.split('/', 1)[0]
+            filename = f'{model_dir}/{_PRECISION_FILENAMES[precision]}'
+        else:
+            filename = default_filename
+
+        resolved_slice = (
+            _PRESET_SLICE_DIMS.get(preset_or_path) if slice_dim is None else slice_dim
         )
         return ONNXLocationEncoder(
             repo_id=repo_id,
             filename=filename,
             embed_dim=spec_dim if embed_dim is None else embed_dim,
+            slice_dim=resolved_slice,
             accepts_year=(spec_accepts_year if accepts_year is None else accepts_year),
             default_year=(spec_default_year if default_year is None else default_year),
             providers=providers,
@@ -284,6 +360,7 @@ def onnx_encoder(
     return ONNXLocationEncoder(
         model_path=preset_or_path,
         embed_dim=embed_dim,
+        slice_dim=slice_dim,
         accepts_year=False if accepts_year is None else accepts_year,
         default_year=2020 if default_year is None else default_year,
         providers=providers,
@@ -292,4 +369,10 @@ def onnx_encoder(
     )
 
 
-__all__ = ('ONNX_PRESET_SPECS', 'ONNXLocationEncoder', 'onnx_encoder')
+__all__ = (
+    'ONNX_PRESET_PRECISIONS',
+    'ONNX_PRESET_SPECS',
+    'ONNXLocationEncoder',
+    'ONNXPrecision',
+    'onnx_encoder',
+)

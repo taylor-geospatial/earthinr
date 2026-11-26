@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.8"]
+requires = ["uv_build>=0.8,<0.14"]
 build-backend = "uv_build"
 
 [project]
@@ -14,6 +14,27 @@ authors = [
     { name = "Isaac Corley", email = "isaac.a.corley@gmail.com" },
     { name = "Taylor Geospatial" },
 ]
+keywords = [
+    "coordbench",
+    "earth-observation",
+    "geospatial",
+    "implicit-neural-representations",
+    "location-encoder",
+    "pytorch",
+    "remote-sensing",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Typing :: Typed",
+]
 dependencies = [
     # filelock 3.13+ required for cross-process atomic result file locking
     "filelock>=3.13",
@@ -25,7 +46,7 @@ dependencies = [
     "numpy>=1.26",
     # pandas 2.1+ required for PyArrow-backed parquet benchmark tables
     "pandas>=2.1",
-    # pyarrow 15+ required for reading CoordBench parquet files
+    # pyarrow 15+ required for reading CoordBench and bundled GeoNames parquet files
     "pyarrow>=15",
     # pyyaml 6+ required for SafeLoader YAML configuration parsing
     "pyyaml>=6",
@@ -38,6 +59,14 @@ dependencies = [
     # torch 2.2+ required for Python 3.12+ wheels and stable inference_mode/linalg APIs
     "torch>=2.2",
 ]
+
+[project.urls]
+Homepage = "https://research.taylorgeospatial.org/neuralftw/"
+Repository = "https://github.com/taylor-geospatial/neuralftw"
+Issues = "https://github.com/taylor-geospatial/neuralftw/issues"
+"Model Zoo" = "https://huggingface.co/taylor-geospatial/neuralftw-zoo"
+Leaderboard = "https://research.taylorgeospatial.org/neuralftw/"
+"Live Demo" = "https://research.taylorgeospatial.org/neuralftw/demo.html"
 
 [project.optional-dependencies]
 products = [
@@ -52,13 +81,13 @@ products = [
     # zarr 3+ required for AlphaEarth and TESSERA v1.1 Zarr embedding stores
     "zarr>=3",
 ]
-knn = [
-    # faissknn 0.4.2+ required for optional FAISS-accelerated k-NN probing
-    "faissknn>=0.4.2",
-]
 onnx = [
     # onnxruntime 1.18+ required for ONNX Runtime inference backend
     "onnxruntime>=1.18",
+]
+viz = [
+    # matplotlib 3.8+ required for embedding map plotting helper
+    "matplotlib>=3.8",
 ]
 style = [
     # ruff 0.14+ required for CPY copyright checks and modern Python 3.12 lint rules
@@ -75,7 +104,7 @@ tests = [
     "pytest-socket>=0.7",
 ]
 all = [
-    "neuralftw[products,knn,onnx,style,tests]",
+    "neuralftw[products,onnx,viz,style,tests]",
 ]
 
 [project.scripts]

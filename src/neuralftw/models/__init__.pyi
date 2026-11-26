@@ -58,7 +58,13 @@ from .mind import (
     SIRENLayer,
     load_mind,
 )
-from .onnx import ONNX_PRESET_SPECS, ONNXLocationEncoder, onnx_encoder
+from .onnx import (
+    ONNX_PRESET_PRECISIONS,
+    ONNX_PRESET_SPECS,
+    ONNXLocationEncoder,
+    ONNXPrecision,
+    onnx_encoder,
+)
 from .osmgraphclip import OSMGraphCLIP_Weights, OSMGraphCLIPLocationEncoder
 from .products import (
     AEF_MOSAIC_URL,
@@ -75,7 +81,9 @@ from .registry import (
     get_model,
     get_model_preset,
     list_models,
+    register_model,
     resolve_model_preset,
+    unregister_model,
 )
 from .rff_capsule import (
     EqualEarthRFFEncoder,
@@ -128,6 +136,7 @@ __all__: tuple[str, ...] = (
     'CHELSA_STD',
     'CHELSA_VAR_NAMES',
     'DEFAULT_MONTHS',
+    'ONNX_PRESET_PRECISIONS',
     'ONNX_PRESET_SPECS',
     'TESSERA_YEARS',
     'TESSERA_ZARR_URL',
@@ -162,6 +171,7 @@ __all__: tuple[str, ...] = (
     'MultiResolutionHashEncoding',
     'NeRFLocationEncoder',
     'ONNXLocationEncoder',
+    'ONNXPrecision',
     'OSMGraphCLIPLocationEncoder',
     'OSMGraphCLIP_Weights',
     'RFFCapsule',
@@ -220,6 +230,7 @@ __all__: tuple[str, ...] = (
     'onnx_encoder',
     'osmgraphclip',
     'products',
+    'register_model',
     'registry',
     'resolve_model_preset',
     'rff_capsule',
@@ -229,4 +240,5 @@ __all__: tuple[str, ...] = (
     'taxabind',
     'terranova',
     'tte',
+    'unregister_model',
 )

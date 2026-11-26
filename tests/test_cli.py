@@ -42,6 +42,18 @@ class TestCLIBasicsAndModels:
         assert main(['models', 'not-a-model']) == 2
         assert 'error:' in capsys.readouterr().err
 
+    def test_datasets_subcommand(self, capsys: pytest.CaptureFixture[str]) -> None:
+        assert main(['datasets']) == 0
+        out_all = capsys.readouterr().out
+        assert '13 all families (60 benchmarks)' in out_all
+        assert 'worldclim' in out_all
+        assert 'better_together' in out_all
+
+        assert main(['datasets', '--official']) == 0
+        out_off = capsys.readouterr().out
+        assert '10 official families' in out_off
+        assert 'better_together' not in out_off
+
 
 class TestCLICoordAndDryRun:
     def test_dry_run_imports_no_heavy_dependencies_in_subprocess(self) -> None:
@@ -49,9 +61,10 @@ class TestCLICoordAndDryRun:
             'import sys; '
             'from neuralftw.cli import main; '
             "rc1 = main(['models']); "
+            "rc_ds = main(['datasets']); "
             "rc2 = main(['coord', '--model', 'mind', '--datasets', 'worldclim', "
             "'--cell-deg', '2', '10', '--dry-run']); "
-            'assert rc1 == 0 and rc2 == 0; '
+            'assert rc1 == 0 and rc_ds == 0 and rc2 == 0; '
             "heavy = [m for m in ('torch', 'numpy', 'pandas') if m in sys.modules]; "
             'assert not heavy, f"Unexpected heavy imports: {heavy}"'
         )
@@ -157,6 +170,49 @@ class TestCLICoordAndDryRun:
         scalar = yaml.safe_load(capsys.readouterr().out)
         assert scalar['evaluation']['cell_deg'] == 5.0
 
+        # Custom --target and repeatable --model-kwarg (with and without --model)
+        rc = main(
+            [
+                'coord',
+                '--target',
+                'neuralftw.models.encoders.NeRFLocationEncoder',
+                '--model-kwarg',
+                'num_frequencies=8',
+                '--model-kwarg',
+                'include_xyz=true',
+                '--dataset',
+                'air_temp',
+                '--dry-run',
+            ]
+        )
+        assert rc == 0
+        custom_cfg = yaml.safe_load(capsys.readouterr().out)
+        assert custom_cfg['model'] == {
+            'name': 'NeRFLocationEncoder',
+            'target': 'neuralftw.models.encoders.NeRFLocationEncoder',
+            'kwargs': {'num_frequencies': 8, 'include_xyz': True},
+        }
+
+        rc = main(
+            [
+                'coord',
+                '--model',
+                'my-nerf',
+                '--target',
+                'neuralftw.models.encoders.NeRFLocationEncoder',
+                '--dataset',
+                'air_temp',
+                '--dry-run',
+            ]
+        )
+        assert rc == 0
+        named_custom = yaml.safe_load(capsys.readouterr().out)
+        assert named_custom['model']['name'] == 'my-nerf'
+        assert (
+            named_custom['model']['target']
+            == 'neuralftw.models.encoders.NeRFLocationEncoder'
+        )
+
     def test_coord_end_to_end_and_leaderboard(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -234,6 +290,23 @@ class TestCLICoordAndDryRun:
         # Unknown model preset
         assert main(['coord', '--model', 'unknown-model', '--dry-run']) == 2
         assert 'error: Unknown model preset' in capsys.readouterr().err
+
+        # Invalid --model-kwarg syntax / key / YAML
+        assert (
+            main(['coord', '--model', 'xyz', '--model-kwarg', 'noequals', '--dry-run'])
+            == 2
+        )
+        assert 'KEY=VALUE' in capsys.readouterr().err
+        assert (
+            main(['coord', '--model', 'xyz', '--model-kwarg', '1bad=2', '--dry-run'])
+            == 2
+        )
+        assert 'Python identifier' in capsys.readouterr().err
+        assert (
+            main(['coord', '--model', 'xyz', '--model-kwarg', 'k=[1, 2', '--dry-run'])
+            == 2
+        )
+        assert 'Invalid YAML value' in capsys.readouterr().err
 
         # Leaderboard errors
         assert main(['leaderboard', str(tmp_path / 'missing.csv')]) == 2

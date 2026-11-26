@@ -14,6 +14,7 @@ import torch
 import neuralftw.models.onnx as onnx_mod
 from neuralftw import DependencyNotFoundError
 from neuralftw.models import (
+    ONNX_PRESET_PRECISIONS,
     ONNX_PRESET_SPECS,
     ONNXLocationEncoder,
     list_models,
@@ -86,16 +87,20 @@ def _install_fake_ort(
 
 
 def test_onnx_preset_specs_match_zoo() -> None:
-    assert len(ONNX_PRESET_SPECS) == 26
+    assert len(ONNX_PRESET_SPECS) == 28
+    assert set(ONNX_PRESET_PRECISIONS) == set(ONNX_PRESET_SPECS)
     registered = set(list_models())
     for preset, spec in ONNX_PRESET_SPECS.items():
         repo_id, filename, embed_dim, accepts_year, default_year = spec
         assert preset in registered
         assert repo_id == 'taylor-geospatial/neuralftw-zoo'
-        assert filename.endswith('/model.onnx')
+        assert filename.endswith('.onnx')
         assert embed_dim > 0
         assert accepts_year is (preset == 'terranova-st')
-        assert default_year == 2020
+        assert default_year in (2020, 2021)
+    assert ONNX_PRESET_PRECISIONS['mind'] == ('int8', 'int4')
+    assert ONNX_PRESET_PRECISIONS['terranova'] == ('fp32',)
+    assert ONNX_PRESET_PRECISIONS['geoclip'] == ('fp32', 'fp16', 'int8', 'int4')
 
 
 def test_missing_onnxruntime_raises_dependency_error(
@@ -120,6 +125,10 @@ def test_invalid_arguments_raise_value_error(monkeypatch: pytest.MonkeyPatch) ->
         ONNXLocationEncoder()
     with pytest.raises(ValueError, match='model_path'):
         ONNXLocationEncoder(repo_id='taylor-geospatial/neuralftw-zoo')
+    with pytest.raises(ValueError, match='slice_dim must be a positive int'):
+        ONNXLocationEncoder(model_path='fake.onnx', slice_dim=0)
+    with pytest.raises(ValueError, match='slice_dim must be a positive int'):
+        ONNXLocationEncoder(model_path='fake.onnx', slice_dim=True)
 
 
 def test_local_path_cpu_and_dynamic_batches(
@@ -245,3 +254,41 @@ def test_onnx_encoder_factory_preset_and_local(
     assert enc_local_custom.embed_dim == 16
     assert enc_local_custom.accepts_year is True
     assert enc_local_custom.default_year == 2023
+
+
+def test_onnx_quantized_precisions_and_mind_slicing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_fake_ort(monkeypatch, embed_dim=128)
+    downloaded = tmp_path / 'quant.onnx'
+    downloaded.write_bytes(b'fake-onnx')
+    calls: list[tuple[str, str]] = []
+
+    def _fake_download(repo_id: str, filename: str) -> str:
+        calls.append((repo_id, filename))
+        return str(downloaded)
+
+    monkeypatch.setattr(onnx_mod, 'hf_download', _fake_download)
+
+    enc_geo_int4 = onnx_encoder('geoclip', precision='int4')
+    assert enc_geo_int4.embed_dim == 512
+    assert calls[-1] == (
+        'taylor-geospatial/neuralftw-zoo',
+        'geoclip/model_int4_bs32.onnx',
+    )
+
+    enc_mind = onnx_encoder('mind', precision='int4')
+    assert enc_mind.embed_dim == 64
+    assert enc_mind.slice_dim == 64
+    assert calls[-1] == ('taylor-geospatial/neuralftw-zoo', 'mind/model_int4_bs32.onnx')
+    out_mind = enc_mind.encode(np.array([0.0, 10.0]), np.array([0.0, 20.0]))
+    assert out_mind.shape == (2, 64)
+
+    enc_slice_inferred = ONNXLocationEncoder(model_path=downloaded, slice_dim=32)
+    assert enc_slice_inferred.embed_dim == 32
+    assert enc_slice_inferred(torch.zeros((3, 2))).shape == (3, 32)
+
+    with pytest.raises(ValueError, match='not available for ONNX preset'):
+        onnx_encoder('mind', precision='fp32')
+    with pytest.raises(ValueError, match='not available for ONNX preset'):
+        onnx_encoder('terranova', precision='int4')

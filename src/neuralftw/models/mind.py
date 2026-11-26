@@ -5,7 +5,6 @@
 
 import math
 import os
-import pathlib
 from typing import Literal
 
 import torch
@@ -239,7 +238,7 @@ def load_mind(
         ValueError: If *ckpt_path* is not a valid MIND checkpoint or *variant* is
             unsupported.
     """
-    if pathlib.Path(ckpt_path).suffix == '.safetensors':
+    if os.path.splitext(os.fspath(ckpt_path))[1] == '.safetensors':
         state = load_safetensors(ckpt_path, device='cpu')
     else:
         payload = torch.load(

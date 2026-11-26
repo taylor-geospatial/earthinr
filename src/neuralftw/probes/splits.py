@@ -3,13 +3,11 @@
 
 """Coordinate fold splitting, urban/rural tagging, and spatial buffer utilities."""
 
-import io
 import os
-import urllib.request
-import zipfile
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import torch
 from numpy.typing import NDArray
 from scipy.spatial import KDTree
@@ -18,7 +16,9 @@ from .._errors import DatasetNotFoundError
 from .._types import Path
 
 EARTH_RADIUS_KM = 6371.0
-GEONAMES_CITIES15000_URL = 'https://download.geonames.org/export/dump/cities15000.zip'
+BUNDLED_CITIES15000_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', 'data', 'cities15000.parquet')
+)
 RANDOM_FOLD_ALGORITHM = 'torch-randperm-v1'
 
 
@@ -113,44 +113,35 @@ def spatial_fold_ids(
 
 
 def load_geonames_cities(
-    path: Path | None = None, download: bool = False
+    path: Path | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Load city latitudes and longitudes from GeoNames ``cities15000.txt``.
+    """Load city latitudes and longitudes from the bundled GeoNames ``cities15000`` table.
+
+    Uses the packaged ``cities15000.parquet`` dataset (GeoNames, CC-BY-4.0) by
+    default without network access. An explicit local ``.parquet`` file (with
+    ``lat`` and ``lon`` columns) or GeoNames tab-separated ``.txt`` file may
+    also be supplied via *path*.
 
     Args:
-        path: Local path to ``cities15000.txt``. Defaults to
-            ``~/.cache/neuralftw/cities15000.txt``.
-        download: Whether to download ``cities15000.zip`` from GeoNames if the file
-            does not exist locally.
+        path: Optional path to a custom ``.parquet`` or GeoNames
+            ``cities15000.txt`` file. Defaults to the bundled parquet asset.
 
     Returns:
         Tuple ``(cities_lat, cities_lon)`` of float64 arrays in degrees.
 
     Raises:
-        DatasetNotFoundError: If the file is missing and *download* is ``False``.
+        DatasetNotFoundError: If *path* does not exist.
     """
-    if path is None:
-        target = os.path.join(
-            os.path.expanduser('~'), '.cache', 'neuralftw', 'cities15000.txt'
-        )
-    else:
-        target = os.fspath(path)
-
+    target = BUNDLED_CITIES15000_PATH if path is None else os.fspath(path)
     if not os.path.isfile(target):
-        if not download:
-            raise DatasetNotFoundError(
-                f'GeoNames cities15000.txt not found at {target}. '
-                'Pass download=True or provide a valid path.'
-            )
-        parent = os.path.dirname(target)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        with urllib.request.urlopen(GEONAMES_CITIES15000_URL, timeout=120) as resp:
-            raw = resp.read()
-        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-            content = zf.read('cities15000.txt')
-        with open(target, 'wb') as out:
-            out.write(content)
+        raise DatasetNotFoundError(f'GeoNames cities file not found at {target}.')
+
+    if os.path.splitext(target)[1].lower() == '.parquet':
+        df = pd.read_parquet(target, columns=['lat', 'lon'])
+        return (
+            df['lat'].to_numpy(dtype=np.float64),
+            df['lon'].to_numpy(dtype=np.float64),
+        )
 
     lats: list[float] = []
     lons: list[float] = []
@@ -259,8 +250,8 @@ def buffered_exclusion_mask(
 
 
 __all__ = (
+    'BUNDLED_CITIES15000_PATH',
     'EARTH_RADIUS_KM',
-    'GEONAMES_CITIES15000_URL',
     'RANDOM_FOLD_ALGORITHM',
     'buffered_exclusion_mask',
     'load_geonames_cities',

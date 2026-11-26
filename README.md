@@ -1,11 +1,17 @@
 # NeuralFTW
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/taylor-geospatial/neuralftw/blob/main/LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![Leaderboard](https://img.shields.io/badge/CoordBench-Leaderboard-0ea5e9.svg)](https://research.taylorgeospatial.org/neuralftw/)
+[![WebGPU Demo](https://img.shields.io/badge/WebGPU-Live%20Demo-22c55e.svg)](https://research.taylorgeospatial.org/neuralftw/demo.html)
 
 **NeuralFTW** is a pure-PyTorch library for geographic Implicit Neural Representations (INRs), coordinate encoders, embedding raster products, and **CoordBench** downstream evaluation.
 
 Every encoder in NeuralFTW implements a single `torch.nn.Module` contract (`LocationEncoder`), loads stripped `safetensors` checkpoints with zero third-party wrapper dependencies (`rshf`, `geoclip`, `transformers`, or runtime `git clone`s are not required), and evaluates cleanly across random, regional block-CV, buffered-exclusion, and urban/rural splits.
+
+- **CoordBench Leaderboard**: https://research.taylorgeospatial.org/neuralftw/
+- **Live Browser WebGPU Demo**: https://research.taylorgeospatial.org/neuralftw/demo.html
+- **Model Zoo (Safetensors + ONNX FP32/FP16/INT8/INT4)**: https://huggingface.co/taylor-geospatial/neuralftw-zoo
 
 ## Installation
 
@@ -19,11 +25,11 @@ Optional extras:
 # AlphaEarth & TESSERA Zarr embedding products (zarr, s3fs, pyproj, requests, numcodecs)
 pip install 'neuralftw[products]'
 
-# FAISS-accelerated k-NN probing (falls back to scikit-learn when omitted)
-pip install 'neuralftw[knn]'
+# ONNX Runtime inference backend for neuralftw-zoo models (FP32, FP16, INT8, INT4)
+pip install 'neuralftw[onnx]'
 
-# ONNX Runtime inference backend for neuralftw-zoo models
-pip install "neuralftw[onnx]"
+# Matplotlib plotting helper (plot_embedding_map)
+pip install 'neuralftw[viz]'
 ```
 
 ## Universal Input/Output Contract
@@ -34,7 +40,7 @@ pip install "neuralftw[onnx]"
 
 ## Model & Input/Output Contract Table
 
-All 26 location-encoder-only checkpoints are hosted in [`taylor-geospatial/neuralftw-zoo`](https://huggingface.co/taylor-geospatial/neuralftw-zoo) as both stripped `<model_id>/model.safetensors` weights and self-contained `<model_id>/model.onnx` graphs (opset 18; opset 20 for `osmgraphclip-*`, dynamic batch `coords: (batch, 2)` — plus `year: (batch,)` for `terranova-st` — verified with `onnxruntime`), reproducible via [`scripts/export_zoo.py`](scripts/export_zoo.py) and [`scripts/export_onnx.py`](scripts/export_onnx.py). MIND remains hosted at [`taylor-geospatial/MIND`](https://huggingface.co/taylor-geospatial/MIND) (`mind.safetensors` and `mind.onnx`). For upcoming and requested encoders not yet integrated, see [docs/CANDIDATE_MODELS.md](docs/CANDIDATE_MODELS.md).
+All 26 location-encoder-only checkpoints are hosted in [`taylor-geospatial/neuralftw-zoo`](https://huggingface.co/taylor-geospatial/neuralftw-zoo) as stripped `<model_id>/model.safetensors` weights and self-contained dynamic-batch ONNX graphs (`model.onnx`, plus quantized `model_fp16.onnx`, `model_int8.onnx`, and `model_int4_bs32.onnx` across the 24 spatial models and quantized `mind`), reproducible via [`scripts/export_zoo.py`](https://github.com/taylor-geospatial/neuralftw/blob/main/scripts/export_zoo.py) and [`scripts/export_onnx.py`](https://github.com/taylor-geospatial/neuralftw/blob/main/scripts/export_onnx.py). MIND FP32 weights remain hosted at [`taylor-geospatial/MIND`](https://huggingface.co/taylor-geospatial/MIND). For upcoming and requested encoders not yet integrated, see [`docs/CANDIDATE_MODELS.md`](https://github.com/taylor-geospatial/neuralftw/blob/main/docs/CANDIDATE_MODELS.md).
 
 | Preset | Family | Spatial Input | Temporal Input (Default) | Output `embed_dim` | Weight Source | Stripped Size | License |
 |---|---|---|---|---:|---|---:|---|
@@ -76,7 +82,7 @@ All 26 location-encoder-only checkpoints are hosted in [`taylor-geospatial/neura
 | `aef` | Embedding Product | `(lon, lat)` deg, `(B, 2)` | Optional `year` 2017–2025 (`2021`) | 64 | Zarr S3 (`tge-labs/aef-mosaic`) | Streams on demand | CC-BY-4.0 |
 | `tessera` | Embedding Product | `(lon, lat)` deg, `(B, 2)` | Optional `year` 2017–2025 (`2021`) | 128 | Zarr S3 (`tessera/v1.1-dclimate`) | Streams on demand | CC-BY-4.0 |
 
-> **License & attribution note**: Code in this repository is MIT-licensed. Individual pretrained checkpoints carry their respective upstream licenses (including CC-BY-4.0 attribution for Climplicit, TerraNova, AlphaEarth, and TESSERA; **CC-BY-NC-4.0** non-commercial for GT-Loc; **CreativeML-OpenRAIL-M** for GeoCLOSP-RN; MIT for LE-SINR; and Apache-2.0 for HydroLoc, trained by Isaac Corley on the [`isaaccorley/hydro`](https://huggingface.co/datasets/isaaccorley/hydro) dataset with no associated paper). `csp-inat` and `csp-fmow` weights originate from the upstream CSP release (Mai et al., ICML 2023) without an explicit license file and are marked unlicensed pending author confirmation.
+> **License & attribution note**: Code in this repository is MIT-licensed. Bundled urban/rural city coordinates (`cities15000.parquet`) are derived from [GeoNames](https://www.geonames.org/) under CC-BY-4.0. Individual pretrained checkpoints carry their respective upstream licenses (including CC-BY-4.0 attribution for Climplicit, TerraNova, AlphaEarth, and TESSERA; **CC-BY-NC-4.0** non-commercial for GT-Loc; **CreativeML-OpenRAIL-M** for GeoCLOSP-RN; MIT for LE-SINR; and Apache-2.0 for HydroLoc, trained by Isaac Corley on [`isaaccorley/hydro`](https://huggingface.co/datasets/isaaccorley/hydro) with no associated paper). `csp-inat` and `csp-fmow` weights originate from the upstream CSP release (Mai et al., ICML 2023) without an explicit license file and are marked unlicensed pending author confirmation.
 
 ## Python API Quickstart
 
@@ -86,14 +92,13 @@ All 26 location-encoder-only checkpoints are hosted in [`taylor-geospatial/neura
 import numpy as np
 import torch
 
-from neuralftw.models import SatCLIPLocationEncoder, get_model, list_models
+import neuralftw
 
 # Inspect all 37 registered presets (no heavy imports required)
-print(list_models())
+print(neuralftw.list_models())
 
-# Load via registry preset or class constructor
-encoder = get_model('mind', device='cpu')
-# Or: encoder = SatCLIPLocationEncoder(weights='VIT16_L40', device='cpu')
+# Load via registry preset (or neuralftw.models.SatCLIPLocationEncoder(...))
+encoder = neuralftw.get_model('mind', device='cpu')
 
 # 1. Direct nn.Module forward pass on (lon, lat) WGS84 degrees
 coords = torch.tensor([[-122.4194, 37.7749], [8.5417, 47.3769]])
@@ -105,9 +110,71 @@ lat = np.array([37.7749, 47.3769])
 year = np.array([2021, 2023])
 features = encoder.encode(lon, lat, year=year)  # shape: (2, 64), dtype: float32
 
-# 3. Optional ONNX Runtime inference backend (pip install "neuralftw[onnx]")
-onnx_enc = get_model('sinr', backend='onnx')
-onnx_features = onnx_enc.encode(lon, lat)  # shape: (2, 256), dtype: float32
+# 3. Optional ONNX Runtime backend with quantized weights (pip install 'neuralftw[onnx]')
+onnx_enc = neuralftw.get_model('geoclip', backend='onnx', precision='int8')
+onnx_features = onnx_enc.encode(lon, lat)  # shape: (2, 512), dtype: float32
+```
+
+### Grid Inference & Plotting
+
+Generate a regular `(lon, lat)` grid, run batched inference, and project embeddings to RGB (requires `pip install 'neuralftw[viz]'` for `plot_embedding_map`):
+
+```python
+import neuralftw
+
+# Global 1-degree grid (or pass bounds=(lon_min, lat_min, lon_max, lat_max) for a region)
+lon, lat, emb = neuralftw.encode_grid('sinr', step_deg=1.0, batch_size=8192)
+
+# Pure-NumPy PCA RGB projection (works without matplotlib)
+rgb = neuralftw.embeddings_to_rgb(emb, components=(0, 1, 2))
+
+# Or plot directly with matplotlib
+fig, ax = neuralftw.plot_embedding_map(lon, lat, emb, title='SINR (PC 1–3)')
+```
+
+### Adding a Custom Model
+
+Subclass `neuralftw.LocationEncoder` and implement `forward(coords, year=None, month=None)` accepting `(B, 2)` `(lon, lat)` degrees. You can register it in Python or pass it directly to the CLI:
+
+```python
+import torch
+from torch import Tensor
+
+import neuralftw
+
+
+@neuralftw.register_model('my-encoder', description='Custom coordinate MLP.')
+class MyEncoder(neuralftw.LocationEncoder):
+    name = 'my-encoder'
+    embed_dim = 64
+
+    def __init__(self, hidden_dim: int = 128, device: str = 'cpu') -> None:
+        super().__init__(device=device)
+        self.net = torch.nn.Sequential(
+            torch.nn.Linear(2, hidden_dim),
+            torch.nn.GELU(),
+            torch.nn.Linear(hidden_dim, self.embed_dim),
+        ).to(self.device)
+
+    def forward(
+        self, coords: Tensor, year: Tensor | None = None, month: Tensor | None = None
+    ) -> Tensor:
+        return self.net(coords.to(torch.float32))
+
+
+enc = neuralftw.get_model('my-encoder', hidden_dim=256)
+lon, lat, emb = neuralftw.encode_grid(enc, step_deg=2.0)
+```
+
+Or evaluate any importable `LocationEncoder` subclass directly from the CLI without writing a YAML config:
+
+```bash
+neuralftw coord \
+  --model my-encoder \
+  --target my_pkg.models.MyEncoder \
+  --model-kwarg hidden_dim=256 \
+  --datasets worldclim air_temp \
+  --split both
 ```
 
 ### Downstream Probing & Spatial Baselines
@@ -155,12 +222,16 @@ results = run_coordbench(cfg)
 
 ## CLI Quickstart
 
-`neuralftw models` and `neuralftw coord --dry-run` start instantaneously without importing `torch`, `numpy`, or `pandas`.
+`neuralftw models`, `neuralftw datasets`, and `neuralftw coord --dry-run` start instantaneously without importing `torch`, `numpy`, or `pandas`.
 
 ```bash
-# List all registered model presets or inspect a single preset YAML
+# List registered model presets or inspect a single preset YAML
 neuralftw models
 neuralftw models mind
+
+# List CoordBench dataset families and benchmark names
+neuralftw datasets
+neuralftw datasets --official
 
 # Validate configuration and inspect effective YAML without running
 neuralftw coord --model mind --datasets official --split both --cell-deg 2 10 20 --dry-run
@@ -175,30 +246,27 @@ neuralftw coord \
   --output results/coordbench.csv \
   --resume
 
-# Run urban/rural stratified or holdout evaluation
+# Run urban/rural stratified or holdout evaluation (uses bundled GeoNames cities15000)
 neuralftw coord \
   --model mind \
   --datasets worldclim-bio1 satclip-country \
   --methods linear chunked \
   --split urban_rural_holdout \
-  --cities-path /path/to/cities15000.txt \
   --output results/urban_rural.csv
 
 # Run encoder-free spatial interpolation baselines (IDW or Ordinary/Indicator Kriging)
 neuralftw coord --model kriging --methods kriging --datasets air_temp --split spatial --cell-deg 10
 
 # Summarize results CSV into per-family and macro rankings
-neuralftw leaderboard results/coordbench.csv --method linear --split spatial
+neuralftw leaderboard results/coordbench_results.csv --method linear --split spatial
 ```
 
-## CoordBench Leaderboard
+## Benchmarks & Analysis
 
-Published benchmark results are tracked in [`results/coordbench_results.csv`](results/coordbench_results.csv) and can be explored interactively via [`docs/index.html`](docs/index.html) (serve locally with `python -m http.server` or open via GitHub Pages).
-
-Implicit spatial resolution measurements (half-sill distances and suggested sampling grid spacings across all 35 encoders) are documented in [`docs/IMPLICIT_RESOLUTION.md`](docs/IMPLICIT_RESOLUTION.md) and stored in [`results/implicit_resolution.csv`](results/implicit_resolution.csv).
-
-ONNX quantization benchmarks (FP32, mixed-FP16, weight-only INT8/INT4, and browser WebGPU compatibility across five representative encoders) are documented in [`docs/QUANTIZATION.md`](docs/QUANTIZATION.md).
+- **CoordBench Leaderboard**: [interactive leaderboard](https://research.taylorgeospatial.org/neuralftw/) backed by [`results/coordbench_results.csv`](https://github.com/taylor-geospatial/neuralftw/blob/main/results/coordbench_results.csv).
+- **Implicit Spatial Resolution & Intrinsic Dimension**: half-sill distances, suggested sampling grids, and `torchid` intrinsic dimensionality across 35 encoders in [`docs/IMPLICIT_RESOLUTION.md`](https://github.com/taylor-geospatial/neuralftw/blob/main/docs/IMPLICIT_RESOLUTION.md) ([`implicit_resolution.csv`](https://github.com/taylor-geospatial/neuralftw/blob/main/results/implicit_resolution.csv), [`intrinsic_dim.csv`](https://github.com/taylor-geospatial/neuralftw/blob/main/results/intrinsic_dim.csv)).
+- **ONNX Quantization**: FP32, mixed-FP16, weight-only INT8/INT4, and browser WebGPU benchmarks in [`docs/QUANTIZATION.md`](https://github.com/taylor-geospatial/neuralftw/blob/main/docs/QUANTIZATION.md).
 
 ## License
 
-NeuralFTW is released under the [MIT License](LICENSE). Copyright (c) Taylor Geospatial.
+NeuralFTW is released under the [MIT License](https://github.com/taylor-geospatial/neuralftw/blob/main/LICENSE). Copyright (c) Taylor Geospatial.

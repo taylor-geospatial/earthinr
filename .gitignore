@@ -221,3 +221,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Track bundled GeoNames cities parquet asset even when user global gitignore ignores *.parquet
+!src/neuralftw/data/*.parquet
