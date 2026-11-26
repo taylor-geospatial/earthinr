@@ -187,9 +187,8 @@ def estimate_intrinsic_dimension(
     """Estimate linear participation ratio and nonlinear manifold intrinsic dimension.
 
     Always computes the pure-NumPy float64 covariance participation ratio (``'pr'``).
-    When *estimators* is non-empty, lazily imports ``torchid`` (installed by default
-    on Python 3.13+) and evaluates each requested estimator on float64 centered
-    embeddings.
+    When *estimators* is non-empty, lazily imports ``torchid`` and evaluates each
+    requested estimator on float64 centered embeddings.
 
     Args:
         embeddings: 2D array or PyTorch tensor of shape ``(N, D)`` with ``N >= 2``.

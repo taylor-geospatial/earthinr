@@ -1,7 +1,7 @@
 # NeuralFTW
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/taylor-geospatial/neuralftw/blob/main/LICENSE)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 [![Leaderboard](https://img.shields.io/badge/CoordBench-Leaderboard-0ea5e9.svg)](https://research.taylorgeospatial.org/neuralftw/)
 [![WebGPU Demo](https://img.shields.io/badge/WebGPU-Live%20Demo-22c55e.svg)](https://research.taylorgeospatial.org/neuralftw/demo.html)
 
@@ -26,7 +26,7 @@ Optional extra (only needed for streaming cloud Zarr embedding products):
 pip install 'neuralftw[products]'
 ```
 
-`onnxruntime`, `matplotlib`, and `torchid>=0.6.0` (Python 3.13+, pure PyTorch with no FAISS) are included by default.
+`onnxruntime`, `matplotlib`, and `torchid>=0.6.0` (pure PyTorch, no FAISS) are included by default.
 
 ## Universal Input/Output Contract
 

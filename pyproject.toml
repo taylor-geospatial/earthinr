@@ -9,7 +9,7 @@ description = "Implicit Neural Representations for Earth Observation."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 authors = [
     { name = "Isaac Corley", email = "isaac.a.corley@gmail.com" },
     { name = "Taylor Geospatial" },
@@ -28,7 +28,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -44,26 +43,26 @@ dependencies = [
     "lazy-loader>=0.4",
     # matplotlib 3.8+ required for embedding map plotting helper
     "matplotlib>=3.8",
-    # numpy 1.26+ required for modern Generator API and Python 3.12+ wheels
-    "numpy>=1.26",
+    # numpy 2.1+ required for Python 3.13+ wheels and modern Generator API
+    "numpy>=2.1",
     # onnxruntime 1.18+ required for ONNX Runtime inference backend
     "onnxruntime>=1.18",
-    # pandas 2.1+ required for PyArrow-backed parquet benchmark tables
-    "pandas>=2.1",
-    # pyarrow 15+ required for reading CoordBench and bundled GeoNames parquet files
-    "pyarrow>=15",
+    # pandas 2.2+ required for Python 3.13+ PyArrow-backed parquet benchmark tables
+    "pandas>=2.2",
+    # pyarrow 18+ required for Python 3.13+ CoordBench and bundled GeoNames parquet files
+    "pyarrow>=18",
     # pyyaml 6+ required for SafeLoader YAML configuration parsing
     "pyyaml>=6",
     # safetensors 0.4+ required for zero-copy PyTorch tensor checkpoint loading
     "safetensors>=0.4",
-    # scikit-learn 1.4+ required for probe baselines and spatial/stratified splitting
-    "scikit-learn>=1.4",
-    # scipy 1.11+ required for spatial KDTree queries and spherical harmonic verification
-    "scipy>=1.11",
-    # torch 2.2+ required for Python 3.12+ wheels and stable inference_mode/linalg APIs
-    "torch>=2.2",
-    # torchid 0.6.0+ required for pure-PyTorch intrinsic dimension estimators (Python 3.13+)
-    "torchid>=0.6.0; python_version >= '3.13'",
+    # scikit-learn 1.5+ required for Python 3.13+ probe baselines and spatial splitting
+    "scikit-learn>=1.5",
+    # scipy 1.14+ required for Python 3.13+ spatial KDTree queries and spherical harmonics
+    "scipy>=1.14",
+    # torch 2.5+ required for Python 3.13+ wheels and stable inference_mode/linalg APIs
+    "torch>=2.5",
+    # torchid 0.6.0+ required for pure-PyTorch intrinsic dimension estimators
+    "torchid>=0.6.0",
 ]
 
 [project.urls]
@@ -88,7 +87,7 @@ products = [
     "zarr>=3",
 ]
 style = [
-    # ruff 0.14+ required for CPY copyright checks and modern Python 3.12 lint rules
+    # ruff 0.14+ required for CPY copyright checks and modern Python 3.13 lint rules
     "ruff>=0.14",
     # ty 0.0.1a23+ required for static type checking across src and tests
     "ty>=0.0.1a23",
