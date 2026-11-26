@@ -20,7 +20,7 @@ class TestCLIBasicsAndModels:
         with pytest.raises(SystemExit) as exc_info:
             main(['--version'])
         assert exc_info.value.code == 0
-        assert 'neuralftw 0.1.0' in capsys.readouterr().out
+        assert 'neuralftw 0.1.1' in capsys.readouterr().out
 
         rc = main([])
         assert rc == 0

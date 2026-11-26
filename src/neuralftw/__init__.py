@@ -5,7 +5,7 @@
 
 import lazy_loader as lazy
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 __getattr__, __dir__, _lazy_all = lazy.attach_stub(__name__, __file__)
 

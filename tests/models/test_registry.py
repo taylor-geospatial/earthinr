@@ -424,7 +424,7 @@ class TestPackagedPresets:
             unregister_model('test-custom-dec')
 
     def test_lazy_top_level_exports(self) -> None:
-        assert neuralftw.__version__ == '0.1.0'
+        assert neuralftw.__version__ == '0.1.1'
         assert neuralftw.ConfigError is ConfigError
         assert neuralftw.LocationEncoder is LocationEncoder
         assert neuralftw.get_model is get_model
