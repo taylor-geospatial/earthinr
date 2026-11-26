@@ -8,7 +8,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.gtloc import GTLoc_Weights, GTLocLocationEncoder, gtloc
+from neuralftw.models.gtloc import GTLoc_Weights, GTLocLocationEncoder, gtloc
 
 
 class TestGTLocLocationEncoder:
@@ -62,7 +62,7 @@ class TestGTLocLocationEncoder:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         w = GTLoc_Weights.verify('DEFAULT')
-        assert w.repo_id == 'taylor-geospatial/earthinr-zoo'
+        assert w.repo_id == 'taylor-geospatial/neuralftw-zoo'
         assert w.filename == 'gtloc/model.safetensors'
         assert w.meta['sigma'] == (1.0, 16.0, 256.0)
         assert w.meta['encoded_size'] == 256

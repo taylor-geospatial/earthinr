@@ -1,8 +1,15 @@
 # Copyright (c) Taylor Geospatial. All rights reserved.
 # Licensed under the MIT License.
 
-from earthinr.coordbench.catalog import list_benchmarks
-from earthinr.coordbench.taxonomy import ENV, FAMILIES, LAND, R2_FLOOR, SOCIO, family_of
+from neuralftw.coordbench.catalog import list_benchmarks
+from neuralftw.coordbench.taxonomy import (
+    ENV,
+    FAMILIES,
+    LAND,
+    R2_FLOOR,
+    SOCIO,
+    family_of,
+)
 
 
 class TestTaxonomy:

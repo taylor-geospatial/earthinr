@@ -6,7 +6,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from earthinr.coordbench.leaderboard import bench_scores, leaderboard, summarize_results
+from neuralftw.coordbench.leaderboard import (
+    bench_scores,
+    leaderboard,
+    summarize_results,
+)
 
 
 class TestLeaderboard:

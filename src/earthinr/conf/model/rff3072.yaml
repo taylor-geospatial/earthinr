@@ -1,8 +1,0 @@
-name: rff3072
-target: earthinr.models.encoders.FrequencyRFFLocationEncoder
-kwargs:
-  num_frequencies: 1536
-  max_scale_km: 5000.0
-  min_scale_km: 20.0
-  seed: 0
-description: Frequency-ordered geodesic random Fourier features on unit sphere (3072-d).

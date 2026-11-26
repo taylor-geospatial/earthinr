@@ -1,7 +1,0 @@
-name: mind
-target: earthinr.models.mind.MINDLocationEncoder
-kwargs:
-  weights: MIND
-  feature: pooled
-  dim: 64
-description: MIND multi-teacher distilled ReSIREN encoder (64-d Matryoshka prefix).

@@ -2,14 +2,14 @@
 # Copyright (c) Taylor Geospatial. All rights reserved.
 # Licensed under the MIT License.
 
-"""Export location-encoder-only safetensors checkpoints for taylor-geospatial/earthinr-zoo.
+"""Export location-encoder-only safetensors checkpoints for taylor-geospatial/neuralftw-zoo.
 
 Downloads upstream checkpoints from Hugging Face Hub, strips all non-location
 components (image/audio/text encoders, classification heads, task decoders,
 pickle wrappers), verifies finiteness and expected tensor counts/shapes, writes
 clean per-model `model.safetensors` + `config.json` files, generates the top-level
 `README.md` model card with full attributions/licenses/SHA256s, and optionally
-creates & uploads `taylor-geospatial/earthinr-zoo`.
+creates & uploads `taylor-geospatial/neuralftw-zoo`.
 """
 
 import argparse
@@ -25,7 +25,7 @@ from huggingface_hub import HfApi, hf_hub_download
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 
-ZOO_REPO_ID = 'taylor-geospatial/earthinr-zoo'
+ZOO_REPO_ID = 'taylor-geospatial/neuralftw-zoo'
 TERRANOVA_REVISION = 'ada28cc009cd52da6949981dce8819fd3ae7c8c0'
 CSP_ZIP_URL = 'https://www.dropbox.com/s/qxr644rj1qxekn2/model_dir.zip?dl=1'
 CSP_LICENSE = 'unlicensed (contact upstream authors; Mai et al., ICML 2023)'
@@ -789,12 +789,12 @@ tags:
   - implicit-neural-representation
   - earth-observation
   - safetensors
-  - earthinr
+  - neuralftw
 ---
 
-# EarthINR Model Zoo (`taylor-geospatial/earthinr-zoo`)
+# NeuralFTW Model Zoo (`taylor-geospatial/neuralftw-zoo`)
 
-Location-encoder-only `safetensors` checkpoints repackaged for **[EarthINR](https://github.com/taylor-geospatial/earthinr)**.
+Location-encoder-only `safetensors` checkpoints repackaged for **[NeuralFTW](https://github.com/taylor-geospatial/neuralftw)**.
 
 All non-location components (satellite/vision encoders, audio encoders, text encoders, large species classification heads, task decoders, and legacy pickle `.pth`/`.ckpt` wrappers) have been stripped so every model loads directly in pure PyTorch + `safetensors` with zero `rshf`, `geoclip`, `transformers`, `timm`, or `open_clip_torch` dependencies.
 
@@ -811,7 +811,7 @@ Each model lives in its own directory `<model_id>/`:
 
 ## Available Checkpoints
 
-All `earthinr` encoders expose a universal `(lon, lat)` WGS84 degrees public API and handle any native `(lat, lon)` coordinate swap internally.
+All `neuralftw` encoders expose a universal `(lon, lat)` WGS84 degrees public API and handle any native `(lat, lon)` coordinate swap internally.
 
 | Model ID | Architecture | Spatial Input | Temporal Input | Output Dim | Size | Tensors | Upstream Source | License | SHA256 (prefix) |
 |---|---|---|---|---:|---:|---:|---|---|---|
@@ -1042,7 +1042,7 @@ def main() -> None:
                 '_gtloc_raw/*',
                 '__pycache__/*',
             ],
-            commit_message=f'Upload EarthINR location-encoder-only safetensors zoo ({len(records)} models)',
+            commit_message=f'Upload NeuralFTW location-encoder-only safetensors zoo ({len(records)} models)',
         )
         print(f'Uploaded cleanly to https://huggingface.co/{args.repo_id}')
 

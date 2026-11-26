@@ -8,7 +8,7 @@ import pytest
 from sklearn.linear_model import Ridge
 from sklearn.metrics import accuracy_score, r2_score
 
-from earthinr.probes.linear import (
+from neuralftw.probes.linear import (
     RIDGE_ALPHAS,
     chunked_penalty_weights,
     chunked_probe_score,

@@ -1,5 +1,0 @@
-name: sinr
-target: earthinr.models.sinr.SINRLocationEncoder
-kwargs:
-  weights: INAT_2023
-description: SINR iNaturalist species distribution location encoder (256-d).

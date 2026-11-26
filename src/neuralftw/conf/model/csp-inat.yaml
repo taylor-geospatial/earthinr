@@ -1,0 +1,5 @@
+name: csp-inat
+target: neuralftw.models.csp.CSPLocationEncoder
+kwargs:
+  weights: INAT
+description: CSP iNaturalist GridCell location encoder (256-d, unlicensed upstream).

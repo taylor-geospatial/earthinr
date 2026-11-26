@@ -11,10 +11,10 @@ from typing import Any
 import numpy as np
 import pytest
 
-import earthinr
-import earthinr.models.onnx as onnx_mod
-from earthinr import ConfigError
-from earthinr.models import (
+import neuralftw
+import neuralftw.models.onnx as onnx_mod
+from neuralftw import ConfigError
+from neuralftw.models import (
     ONNX_PRESET_SPECS,
     LocationEncoder,
     ONNXLocationEncoder,
@@ -22,7 +22,7 @@ from earthinr.models import (
     onnx_encoder,
     registry,
 )
-from earthinr.models.registry import (
+from neuralftw.models.registry import (
     ModelPreset,
     build_model,
     get_model,
@@ -80,55 +80,57 @@ class TestModelPreset:
     def test_valid_and_dunders(self) -> None:
         preset = ModelPreset(
             name='demo',
-            target='earthinr.models.encoders.XYZLocationEncoder',
+            target='neuralftw.models.encoders.XYZLocationEncoder',
             kwargs={'batch_size': 64},
             description='Demo preset',
         )
         other = ModelPreset(
             name='demo',
-            target='earthinr.models.encoders.XYZLocationEncoder',
+            target='neuralftw.models.encoders.XYZLocationEncoder',
             kwargs={'batch_size': 64},
             description='Demo preset',
         )
         assert preset == other
         assert (preset == 'not-a-preset') is False
         assert 'ModelPreset' in repr(preset)
-        assert 'earthinr.models.encoders.XYZLocationEncoder' in preset.to_yaml()
+        assert 'neuralftw.models.encoders.XYZLocationEncoder' in preset.to_yaml()
 
         no_kwargs = ModelPreset(
-            name='plain', target='earthinr.models.encoders.XYZLocationEncoder'
+            name='plain', target='neuralftw.models.encoders.XYZLocationEncoder'
         )
         assert no_kwargs.kwargs == {}
         assert no_kwargs.description == ''
 
     def test_validation_errors(self) -> None:
         with pytest.raises(ConfigError, match='name'):
-            ModelPreset(name='  ', target='earthinr.models.encoders.XYZLocationEncoder')
+            ModelPreset(
+                name='  ', target='neuralftw.models.encoders.XYZLocationEncoder'
+            )
         with pytest.raises(ConfigError, match='target must be a non-empty'):
             ModelPreset(name='x', target='')
         with pytest.raises(ConfigError, match='dotted Python symbol'):
             ModelPreset(name='x', target='singleident')
         with pytest.raises(ConfigError, match='dotted Python symbol'):
-            ModelPreset(name='x', target='earthinr.not-valid')
+            ModelPreset(name='x', target='neuralftw.not-valid')
         bad_kwargs: Any = ['bad']
         bad_key_kwargs: Any = {1: 'a'}
         bad_desc: Any = 123
         with pytest.raises(ConfigError, match='kwargs must be a mapping'):
             ModelPreset(
                 name='x',
-                target='earthinr.models.encoders.XYZLocationEncoder',
+                target='neuralftw.models.encoders.XYZLocationEncoder',
                 kwargs=bad_kwargs,
             )
         with pytest.raises(ConfigError, match='kwargs keys must be strings'):
             ModelPreset(
                 name='x',
-                target='earthinr.models.encoders.XYZLocationEncoder',
+                target='neuralftw.models.encoders.XYZLocationEncoder',
                 kwargs=bad_key_kwargs,
             )
         with pytest.raises(ConfigError, match='description must be a string'):
             ModelPreset(
                 name='x',
-                target='earthinr.models.encoders.XYZLocationEncoder',
+                target='neuralftw.models.encoders.XYZLocationEncoder',
                 description=bad_desc,
             )
 
@@ -258,7 +260,7 @@ class TestPackagedPresets:
     ) -> None:
         custom = resolve_model_preset(
             'custom-xyz',
-            target='earthinr.models.encoders.XYZLocationEncoder',
+            target='neuralftw.models.encoders.XYZLocationEncoder',
             kwargs={'batch_size': 32},
         )
         enc = build_model(custom, device='cpu')
@@ -294,7 +296,7 @@ class TestPackagedPresets:
         (bad_dir / 'syntax.yaml').write_text('a: [1, 2\n', encoding='utf-8')
         (bad_dir / 'list.yaml').write_text('- one\n- two\n', encoding='utf-8')
         (bad_dir / 'unknown.yaml').write_text(
-            'target: earthinr.models.encoders.XYZLocationEncoder\nextra: 1\n',
+            'target: neuralftw.models.encoders.XYZLocationEncoder\nextra: 1\n',
             encoding='utf-8',
         )
         (bad_dir / 'notarget.yaml').write_text('name: notarget\n', encoding='utf-8')
@@ -357,10 +359,10 @@ class TestPackagedPresets:
             get_model('sinr', backend=bad_backend)
 
     def test_lazy_top_level_exports(self) -> None:
-        assert earthinr.__version__ == '0.1.0'
-        assert earthinr.ConfigError is ConfigError
-        assert earthinr.models.XYZLocationEncoder is not None
-        assert earthinr.models.ONNXLocationEncoder is ONNXLocationEncoder
-        assert earthinr.models.ONNX_PRESET_SPECS is ONNX_PRESET_SPECS
-        assert earthinr.models.onnx_encoder is onnx_encoder
-        assert earthinr.coordbench.CoordConfig is not None
+        assert neuralftw.__version__ == '0.1.0'
+        assert neuralftw.ConfigError is ConfigError
+        assert neuralftw.models.XYZLocationEncoder is not None
+        assert neuralftw.models.ONNXLocationEncoder is ONNXLocationEncoder
+        assert neuralftw.models.ONNX_PRESET_SPECS is ONNX_PRESET_SPECS
+        assert neuralftw.models.onnx_encoder is onnx_encoder
+        assert neuralftw.coordbench.CoordConfig is not None

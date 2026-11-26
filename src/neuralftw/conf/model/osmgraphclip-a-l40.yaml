@@ -1,0 +1,5 @@
+name: osmgraphclip-a-l40
+target: neuralftw.models.osmgraphclip.OSMGraphCLIPLocationEncoder
+kwargs:
+  weights: A_L40
+description: OSMGraphCLIP A-L40 single-scale spherical harmonic SirenNet location encoder (256-d).

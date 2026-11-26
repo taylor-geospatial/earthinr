@@ -6,30 +6,30 @@ import math
 import pytest
 import torch
 
-import earthinr
-from earthinr._errors import (
+import neuralftw
+from neuralftw._errors import (
     ConfigError,
     DatasetNotFoundError,
     DependencyNotFoundError,
-    EarthINRError,
+    NeuralFTWError,
 )
-from earthinr._utils import lazy_import, resolve_device
-from earthinr.cli import main
+from neuralftw._utils import lazy_import, resolve_device
+from neuralftw.cli import main
 
 
 class TestPackage:
     def test_version_and_exports(self) -> None:
-        assert isinstance(earthinr.__version__, str)
-        assert earthinr.__version__ == '0.1.0'
-        assert hasattr(earthinr, 'models')
-        assert hasattr(earthinr, 'probes')
-        assert hasattr(earthinr, 'coordbench')
+        assert isinstance(neuralftw.__version__, str)
+        assert neuralftw.__version__ == '0.1.0'
+        assert hasattr(neuralftw, 'models')
+        assert hasattr(neuralftw, 'probes')
+        assert hasattr(neuralftw, 'coordbench')
 
     def test_error_hierarchy(self) -> None:
-        assert issubclass(DependencyNotFoundError, EarthINRError)
-        assert issubclass(DatasetNotFoundError, EarthINRError)
+        assert issubclass(DependencyNotFoundError, NeuralFTWError)
+        assert issubclass(DatasetNotFoundError, NeuralFTWError)
         assert issubclass(DatasetNotFoundError, FileNotFoundError)
-        assert issubclass(ConfigError, EarthINRError)
+        assert issubclass(ConfigError, NeuralFTWError)
         assert issubclass(ConfigError, ValueError)
 
 
@@ -42,7 +42,7 @@ class TestCLI:
             main(['--version'])
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert earthinr.__version__ in captured.out
+        assert neuralftw.__version__ in captured.out
 
 
 class TestLazyImport:
@@ -52,15 +52,15 @@ class TestLazyImport:
 
     def test_import_missing_without_extra(self) -> None:
         with pytest.raises(
-            DependencyNotFoundError, match='pip install _nonexistent_earthinr_pkg_xyz'
+            DependencyNotFoundError, match='pip install _nonexistent_neuralftw_pkg_xyz'
         ):
-            lazy_import('_nonexistent_earthinr_pkg_xyz')
+            lazy_import('_nonexistent_neuralftw_pkg_xyz')
 
     def test_import_missing_with_extra(self) -> None:
         with pytest.raises(
-            DependencyNotFoundError, match=r'pip install earthinr\[products\]'
+            DependencyNotFoundError, match=r'pip install neuralftw\[products\]'
         ):
-            lazy_import('_nonexistent_earthinr_pkg_xyz', extra='products')
+            lazy_import('_nonexistent_neuralftw_pkg_xyz', extra='products')
 
 
 class TestResolveDevice:

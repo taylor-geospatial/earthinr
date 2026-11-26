@@ -4,11 +4,11 @@ Continuous coordinate encoders and geographic Implicit Neural Representations (I
 
 ## Half-Sill Characteristic Distance
 
-EarthINR quantifies implicit spatial resolution through the isotropic empirical semivariogram of an encoder $f(x) \in \mathbb{R}^D$:
+NeuralFTW quantifies implicit spatial resolution through the isotropic empirical semivariogram of an encoder $f(x) \in \mathbb{R}^D$:
 
 $$\gamma(h) = \frac{1}{2}\,\mathbb{E}\left[\|f(x_i) - f(x_j)\|_2^2\right]$$
 
-where $h$ is the great-circle separation between coordinates $x_i$ and $x_j$ on a sphere of radius $R = 6{,}371\text{ km}$. In [`src/earthinr/analysis/variogram.py`](../src/earthinr/analysis/variogram.py), the default `geodesic` estimator displaces each sampled anchor point along a uniform random bearing by an exact great-circle lag $h$. Solving the direct spherical geodesic avoids the $\cos(\text{lat})$ distortion of degree-space offsets toward the poles and keeps pair counts constant across short and long lags.
+where $h$ is the great-circle separation between coordinates $x_i$ and $x_j$ on a sphere of radius $R = 6{,}371\text{ km}$. In [`src/neuralftw/analysis/variogram.py`](../src/neuralftw/analysis/variogram.py), the default `geodesic` estimator displaces each sampled anchor point along a uniform random bearing by an exact great-circle lag $h$. Solving the direct spherical geodesic avoids the $\cos(\text{lat})$ distortion of degree-space offsets toward the poles and keeps pair counts constant across short and long lags.
 
 From the resulting curve $\gamma(h)$, `half_sill_distance` computes three quantities:
 
@@ -78,7 +78,7 @@ Values below are copied verbatim from [`results/implicit_resolution.csv`](../res
 
 ## Intrinsic Dimension and Participation Ratio (100 km Grid)
 
-Half-sill distance measures the spatial lag over which an encoder's embeddings decorrelate, whereas intrinsic dimensionality measures how much of the ambient embedding space $\mathbb{R}^D$ those embeddings occupy. EarthINR implements both linear and nonlinear dimensionality estimators in [`src/earthinr/analysis/intrinsic_dim.py`](../src/earthinr/analysis/intrinsic_dim.py):
+Half-sill distance measures the spatial lag over which an encoder's embeddings decorrelate, whereas intrinsic dimensionality measures how much of the ambient embedding space $\mathbb{R}^D$ those embeddings occupy. NeuralFTW implements both linear and nonlinear dimensionality estimators in [`src/neuralftw/analysis/intrinsic_dim.py`](../src/neuralftw/analysis/intrinsic_dim.py):
 
 - **Participation ratio (`PR`)**: computed in pure NumPy/PyTorch float64 from the eigenvalues $\lambda_i$ of the centered sample covariance matrix,
 
@@ -149,13 +149,13 @@ Values below join `Half-Sill (km)` from [`results/implicit_resolution.csv`](../r
 ```python
 import numpy as np
 
-from earthinr.analysis import (
+from neuralftw.analysis import (
     analyze_implicit_resolution,
     analyze_intrinsic_dimension,
     generate_equal_area_grid,
     sample_sphere_points,
 )
-from earthinr.models import get_model
+from neuralftw.models import get_model
 
 encoder = get_model('satclip', device='cpu')
 lon, lat = sample_sphere_points(n=16_042, seed=0)

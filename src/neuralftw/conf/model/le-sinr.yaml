@@ -1,0 +1,5 @@
+name: le-sinr
+target: neuralftw.models.lesinr.LESINRLocationEncoder
+kwargs:
+  weights: DEFAULT
+description: LE-SINR language-enhanced species distribution location encoder (256-d).

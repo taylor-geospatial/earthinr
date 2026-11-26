@@ -10,7 +10,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.terranova import (
+from neuralftw.models.terranova import (
     MultiResolutionHashEncoding,
     ResidualMLPDecoder,
     TerraNova_Weights,

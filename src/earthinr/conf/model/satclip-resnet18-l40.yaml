@@ -1,5 +1,0 @@
-name: satclip-resnet18-l40
-target: earthinr.models.satclip.SatCLIPLocationEncoder
-kwargs:
-  weights: RESNET18_L40
-description: SatCLIP ResNet-18 L=40 spherical harmonic SirenNet location encoder (256-d).

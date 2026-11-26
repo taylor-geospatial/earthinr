@@ -1,0 +1,6 @@
+name: terranova-st
+target: neuralftw.models.terranova.TerraNovaLocationEncoder
+kwargs:
+  weights: SPATIOTEMPORAL
+  space: spatiotemporal
+description: TerraNova spatiotemporal location encoder (256-d, default year=2020).

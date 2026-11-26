@@ -10,7 +10,7 @@ import safetensors.torch
 import torch
 from torch import nn
 
-from earthinr.models.climplicit import (
+from neuralftw.models.climplicit import (
     CHELSA_MEAN,
     CHELSA_STD,
     Climplicit_Weights,

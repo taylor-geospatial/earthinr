@@ -9,8 +9,8 @@ import pytest
 import torch
 from torch import Tensor
 
-import earthinr
-from earthinr.analysis import (
+import neuralftw
+from neuralftw.analysis import (
     EARTH_RADIUS_KM,
     KM_PER_DEGREE,
     analyze_implicit_resolution,
@@ -19,8 +19,8 @@ from earthinr.analysis import (
     half_sill_distance,
     sample_sphere_points,
 )
-from earthinr.analysis.variogram import _haversine_km
-from earthinr.models import LocationEncoder, get_model
+from neuralftw.analysis.variogram import _haversine_km
+from neuralftw.models import LocationEncoder, get_model
 
 
 class _RecordingEncoder(LocationEncoder):
@@ -365,4 +365,4 @@ class TestAnalyzeImplicitResolution:
 
 
 def test_top_level_lazy_export() -> None:
-    assert earthinr.analysis.EARTH_RADIUS_KM == EARTH_RADIUS_KM
+    assert neuralftw.analysis.EARTH_RADIUS_KM == EARTH_RADIUS_KM

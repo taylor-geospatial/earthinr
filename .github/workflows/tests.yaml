@@ -39,7 +39,7 @@ jobs:
         run: uv sync --locked --python ${{ matrix.python-version }} --extra tests
 
       - name: Run pytest with coverage
-        run: uv run pytest --cov=earthinr --cov-fail-under=100 --cov-report=term-missing
+        run: uv run pytest --cov=neuralftw --cov-fail-under=100 --cov-report=term-missing
 
   build:
     name: Build and smoke-test wheel
@@ -62,8 +62,8 @@ jobs:
 
       - name: Install wheel into clean venv and smoke-test CLI
         run: |
-          uv venv --python 3.13 /tmp/earthinr-smoke-venv
-          uv pip install --python /tmp/earthinr-smoke-venv/bin/python dist/*.whl
-          /tmp/earthinr-smoke-venv/bin/earthinr --version
-          /tmp/earthinr-smoke-venv/bin/earthinr models
-          /tmp/earthinr-smoke-venv/bin/earthinr coord --model sinr --dataset air_temp --split both --dry-run
+          uv venv --python 3.13 /tmp/neuralftw-smoke-venv
+          uv pip install --python /tmp/neuralftw-smoke-venv/bin/python dist/*.whl
+          /tmp/neuralftw-smoke-venv/bin/neuralftw --version
+          /tmp/neuralftw-smoke-venv/bin/neuralftw models
+          /tmp/neuralftw-smoke-venv/bin/neuralftw coord --model sinr --dataset air_temp --split both --dry-run

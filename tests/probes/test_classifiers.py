@@ -8,9 +8,9 @@ import pytest
 import torch
 from sklearn.linear_model import LogisticRegression
 
-from earthinr._errors import DependencyNotFoundError
-from earthinr.probes import classifiers as clf_mod
-from earthinr.probes.classifiers import (
+from neuralftw._errors import DependencyNotFoundError
+from neuralftw.probes import classifiers as clf_mod
+from neuralftw.probes.classifiers import (
     LBFGSLogReg,
     knn_probe_score,
     logreg_probe_score,

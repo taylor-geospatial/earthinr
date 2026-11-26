@@ -8,7 +8,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.tte import (
+from neuralftw.models.tte import (
     SemanticRegisterAttention,
     TTE_Weights,
     TTELocationEncoder,

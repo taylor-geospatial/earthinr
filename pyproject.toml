@@ -3,7 +3,7 @@ requires = ["uv_build>=0.8"]
 build-backend = "uv_build"
 
 [project]
-name = "earthinr"
+name = "neuralftw"
 version = "0.1.0"
 description = "Implicit Neural Representations for Earth Observation."
 readme = "README.md"
@@ -75,11 +75,11 @@ tests = [
     "pytest-socket>=0.7",
 ]
 all = [
-    "earthinr[products,knn,onnx,style,tests]",
+    "neuralftw[products,knn,onnx,style,tests]",
 ]
 
 [project.scripts]
-earthinr = "earthinr.cli:main"
+neuralftw = "neuralftw.cli:main"
 
 [tool.ruff]
 line-length = 88
@@ -101,7 +101,7 @@ ignore = ["ANN401"]
 notice-rgx = "# Copyright \\(c\\) Taylor Geospatial\\. All rights reserved\\.\\n# Licensed under the MIT License\\."
 
 [tool.ruff.lint.isort]
-known-first-party = ["earthinr"]
+known-first-party = ["neuralftw"]
 split-on-trailing-comma = false
 
 [tool.ruff.lint.pydocstyle]
@@ -119,7 +119,7 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
-source = ["earthinr"]
+source = ["neuralftw"]
 
 [tool.coverage.report]
 exclude_also = ["@overload", "if TYPE_CHECKING:"]

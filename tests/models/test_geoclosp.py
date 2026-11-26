@@ -8,7 +8,7 @@ import pytest
 import safetensors.torch
 import torch
 
-from earthinr.models.geoclosp import (
+from neuralftw.models.geoclosp import (
     GeoCLOSP_Weights,
     GeoCLOSPLocationEncoder,
     _normalize_geoclosp_state_dict,
@@ -120,7 +120,7 @@ class TestGeoCLOSPLocationEncoder:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         w = GeoCLOSP_Weights.verify('RN50_L10')
-        assert w.repo_id == 'taylor-geospatial/earthinr-zoo'
+        assert w.repo_id == 'taylor-geospatial/neuralftw-zoo'
         assert w.filename == 'geoclosp-rn/model.safetensors'
         assert w.meta['legendre_polys'] == 10
         assert w.meta['location_dim'] == 256

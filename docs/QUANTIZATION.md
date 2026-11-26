@@ -1,6 +1,6 @@
 # ONNX Quantization for Geographic INRs
 
-Exporting geographic Implicit Neural Representations (INRs) to ONNX enables CPU and browser WebGPU inference without PyTorch, but full FP32 checkpoints can exceed browser memory limits or slow downloads (`432.29 MiB` for `mind`, `54.16 MiB` for `sled-s1-s2-ls`, `36.20 MiB` for `geoclip`). Unlike standard vision or language backbones, coordinate networks are sensitive to quantization in their coordinate projections, trigonometric activations, and high-frequency first layers (`w0 = 30`). This note reports an empirical benchmark comparing five precision formats across five representative EarthINR encoders and documents how to reproduce the verified exports with [`scripts/export_onnx.py`](../scripts/export_onnx.py).
+Exporting geographic Implicit Neural Representations (INRs) to ONNX enables CPU and browser WebGPU inference without PyTorch, but full FP32 checkpoints can exceed browser memory limits or slow downloads (`432.29 MiB` for `mind`, `54.16 MiB` for `sled-s1-s2-ls`, `36.20 MiB` for `geoclip`). Unlike standard vision or language backbones, coordinate networks are sensitive to quantization in their coordinate projections, trigonometric activations, and high-frequency first layers (`w0 = 30`). This note reports an empirical benchmark comparing five precision formats across five representative NeuralFTW encoders and documents how to reproduce the verified exports with [`scripts/export_onnx.py`](../scripts/export_onnx.py).
 
 ## Benchmark Setup
 
@@ -16,7 +16,7 @@ All non-excluded `Gemm(A, B, C, transB=1)` nodes were rewritten to `MatMul(A, B^
 
 Metrics were collected under three protocols:
 
-- **Numerical fidelity and downstream probing**: `satclip-air-temp` (`N = 3,076`), measuring cosine similarity and max absolute difference against FP32, median CPU latency over 3 runs after 1 warmup on ONNX Runtime 1.32.0, and 5-fold Ridge $R^2$ (`earthinr.probes.linear_probe_score`, `random` and `spatial 10°` splits, `seed=0`).
+- **Numerical fidelity and downstream probing**: `satclip-air-temp` (`N = 3,076`), measuring cosine similarity and max absolute difference against FP32, median CPU latency over 3 runs after 1 warmup on ONNX Runtime 1.32.0, and 5-fold Ridge $R^2$ (`neuralftw.probes.linear_probe_score`, `random` and `spatial 10°` splits, `seed=0`).
 - **Spatial scale and geometry**: `worldclim-bio1` land points (`N = 18,068`), 48 log-spaced geodesic lags from `1 km` to `8,000 km`, `pairs_per_lag = 1024`, `seed=0`, using identical anchor-offset pairs across all variants so `ΔHS (%)` has zero Monte Carlo noise. `Nugget 1 km` reports $\gamma(1\text{ km})$ and its percentage of the variogram sill; `PR` is the covariance participation ratio on base land embeddings.
 - **Browser WebGPU and WASM**: Headless Chrome on Apple Silicon Metal WebGPU (`shader-f16=true`) over `N = 3,076` points, comparing `onnxruntime-web@1.31.1` against `1.20.1`.
 

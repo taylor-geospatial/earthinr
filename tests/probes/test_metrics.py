@@ -13,7 +13,7 @@ from sklearn.metrics import (
     f1_score,
 )
 
-from earthinr.probes.metrics import (
+from neuralftw.probes.metrics import (
     classification_metrics_from_cm,
     confusion_matrix,
     load_sparse_cm,

@@ -11,8 +11,8 @@ from typing import Self
 import numpy as np
 import pytest
 
-from earthinr._errors import DatasetNotFoundError
-from earthinr.probes.splits import (
+from neuralftw._errors import DatasetNotFoundError
+from neuralftw.probes.splits import (
     RANDOM_FOLD_ALGORITHM,
     buffered_exclusion_mask,
     load_geonames_cities,

@@ -12,7 +12,7 @@ import scipy.special
 import torch
 from torch import nn
 
-from earthinr.models.satclip import (
+from neuralftw.models.satclip import (
     SatCLIP_Weights,
     SatCLIPLocationEncoder,
     SirenNet,

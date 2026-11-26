@@ -1,5 +1,0 @@
-name: gair
-target: earthinr.models.rff_capsule.GAIRLocationEncoder
-kwargs:
-  weights: DEFAULT
-description: GAIR geo-aligned implicit representation location encoder (768-d).

@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from earthinr.cli import main
+from neuralftw.cli import main
 
 
 class TestCLIBasicsAndModels:
@@ -20,11 +20,11 @@ class TestCLIBasicsAndModels:
         with pytest.raises(SystemExit) as exc_info:
             main(['--version'])
         assert exc_info.value.code == 0
-        assert 'earthinr 0.1.0' in capsys.readouterr().out
+        assert 'neuralftw 0.1.0' in capsys.readouterr().out
 
         rc = main([])
         assert rc == 0
-        assert 'usage: earthinr' in capsys.readouterr().out
+        assert 'usage: neuralftw' in capsys.readouterr().out
 
     def test_models_subcommand(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert main(['models']) == 0
@@ -36,7 +36,7 @@ class TestCLIBasicsAndModels:
         assert main(['models', 'mind']) == 0
         parsed = yaml.safe_load(capsys.readouterr().out)
         assert parsed['name'] == 'mind'
-        assert parsed['target'] == 'earthinr.models.mind.MINDLocationEncoder'
+        assert parsed['target'] == 'neuralftw.models.mind.MINDLocationEncoder'
         assert parsed['kwargs']['dim'] == 64
 
         assert main(['models', 'not-a-model']) == 2
@@ -47,7 +47,7 @@ class TestCLICoordAndDryRun:
     def test_dry_run_imports_no_heavy_dependencies_in_subprocess(self) -> None:
         code = (
             'import sys; '
-            'from earthinr.cli import main; '
+            'from neuralftw.cli import main; '
             "rc1 = main(['models']); "
             "rc2 = main(['coord', '--model', 'mind', '--datasets', 'worldclim', "
             "'--cell-deg', '2', '10', '--dry-run']); "
@@ -70,7 +70,7 @@ class TestCLICoordAndDryRun:
                     'schema_version': 1,
                     'model': {
                         'name': 'custom',
-                        'target': 'earthinr.models.encoders.XYZLocationEncoder',
+                        'target': 'neuralftw.models.encoders.XYZLocationEncoder',
                         'kwargs': {'batch_size': 128},
                     },
                     'datasets': ['air_temp'],
@@ -84,7 +84,8 @@ class TestCLICoordAndDryRun:
         assert rc == 0
         out_base = yaml.safe_load(capsys.readouterr().out)
         assert (
-            out_base['model']['target'] == 'earthinr.models.encoders.XYZLocationEncoder'
+            out_base['model']['target']
+            == 'neuralftw.models.encoders.XYZLocationEncoder'
         )
 
         # CLI overrides replace model root and set all evaluation/runtime/output flags

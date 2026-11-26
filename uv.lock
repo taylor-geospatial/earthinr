@@ -604,91 +604,6 @@ wheels = [
 ]
 
 [[package]]
-name = "earthinr"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "filelock" },
-    { name = "huggingface-hub" },
-    { name = "lazy-loader" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "pyarrow" },
-    { name = "pyyaml" },
-    { name = "safetensors" },
-    { name = "scikit-learn" },
-    { name = "scipy" },
-    { name = "torch" },
-]
-
-[package.optional-dependencies]
-all = [
-    { name = "faissknn" },
-    { name = "numcodecs" },
-    { name = "onnxruntime" },
-    { name = "pyproj" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-socket" },
-    { name = "requests" },
-    { name = "ruff" },
-    { name = "s3fs" },
-    { name = "ty" },
-    { name = "zarr" },
-]
-knn = [
-    { name = "faissknn" },
-]
-onnx = [
-    { name = "onnxruntime" },
-]
-products = [
-    { name = "numcodecs" },
-    { name = "pyproj" },
-    { name = "requests" },
-    { name = "s3fs" },
-    { name = "zarr" },
-]
-style = [
-    { name = "ruff" },
-    { name = "ty" },
-]
-tests = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-socket" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "earthinr", extras = ["products", "knn", "onnx", "style", "tests"], marker = "extra == 'all'" },
-    { name = "faissknn", marker = "extra == 'knn'", specifier = ">=0.4.2" },
-    { name = "filelock", specifier = ">=3.13" },
-    { name = "huggingface-hub", specifier = ">=0.23" },
-    { name = "lazy-loader", specifier = ">=0.4" },
-    { name = "numcodecs", marker = "extra == 'products'", specifier = ">=0.13" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "onnxruntime", marker = "extra == 'onnx'", specifier = ">=1.18" },
-    { name = "pandas", specifier = ">=2.1" },
-    { name = "pyarrow", specifier = ">=15" },
-    { name = "pyproj", marker = "extra == 'products'", specifier = ">=3.6" },
-    { name = "pytest", marker = "extra == 'tests'", specifier = ">=8" },
-    { name = "pytest-cov", marker = "extra == 'tests'", specifier = ">=5" },
-    { name = "pytest-socket", marker = "extra == 'tests'", specifier = ">=0.7" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "requests", marker = "extra == 'products'", specifier = ">=2.31" },
-    { name = "ruff", marker = "extra == 'style'", specifier = ">=0.14" },
-    { name = "s3fs", marker = "extra == 'products'", specifier = ">=2024" },
-    { name = "safetensors", specifier = ">=0.4" },
-    { name = "scikit-learn", specifier = ">=1.4" },
-    { name = "scipy", specifier = ">=1.11" },
-    { name = "torch", specifier = ">=2.2" },
-    { name = "ty", marker = "extra == 'style'", specifier = ">=0.0.1a23" },
-    { name = "zarr", marker = "extra == 'products'", specifier = ">=3" },
-]
-provides-extras = ["products", "knn", "onnx", "style", "tests", "all"]
-
-[[package]]
 name = "faissknn"
 version = "0.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1345,6 +1260,91 @@ sdist = { url = "https://files.pythonhosted.org/packages/dc/76/3af777226b63a5e64
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/cd/fe58041e9011f307c490e3e17dd48cc516448f7c698a3f2d9d9d65d7e6a8/networkx-3.7-py3-none-any.whl", hash = "sha256:e3fd2c13a7814cee3746340d8d7f8598a67f16a58bf47fb7f8793fab6efca1b0", size = 2142205, upload-time = "2026-09-21T16:45:14.609Z" },
 ]
+
+[[package]]
+name = "neuralftw"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "filelock" },
+    { name = "huggingface-hub" },
+    { name = "lazy-loader" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+    { name = "safetensors" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+    { name = "torch" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "faissknn" },
+    { name = "numcodecs" },
+    { name = "onnxruntime" },
+    { name = "pyproj" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-socket" },
+    { name = "requests" },
+    { name = "ruff" },
+    { name = "s3fs" },
+    { name = "ty" },
+    { name = "zarr" },
+]
+knn = [
+    { name = "faissknn" },
+]
+onnx = [
+    { name = "onnxruntime" },
+]
+products = [
+    { name = "numcodecs" },
+    { name = "pyproj" },
+    { name = "requests" },
+    { name = "s3fs" },
+    { name = "zarr" },
+]
+style = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+tests = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-socket" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "faissknn", marker = "extra == 'knn'", specifier = ">=0.4.2" },
+    { name = "filelock", specifier = ">=3.13" },
+    { name = "huggingface-hub", specifier = ">=0.23" },
+    { name = "lazy-loader", specifier = ">=0.4" },
+    { name = "neuralftw", extras = ["products", "knn", "onnx", "style", "tests"], marker = "extra == 'all'" },
+    { name = "numcodecs", marker = "extra == 'products'", specifier = ">=0.13" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "onnxruntime", marker = "extra == 'onnx'", specifier = ">=1.18" },
+    { name = "pandas", specifier = ">=2.1" },
+    { name = "pyarrow", specifier = ">=15" },
+    { name = "pyproj", marker = "extra == 'products'", specifier = ">=3.6" },
+    { name = "pytest", marker = "extra == 'tests'", specifier = ">=8" },
+    { name = "pytest-cov", marker = "extra == 'tests'", specifier = ">=5" },
+    { name = "pytest-socket", marker = "extra == 'tests'", specifier = ">=0.7" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "requests", marker = "extra == 'products'", specifier = ">=2.31" },
+    { name = "ruff", marker = "extra == 'style'", specifier = ">=0.14" },
+    { name = "s3fs", marker = "extra == 'products'", specifier = ">=2024" },
+    { name = "safetensors", specifier = ">=0.4" },
+    { name = "scikit-learn", specifier = ">=1.4" },
+    { name = "scipy", specifier = ">=1.11" },
+    { name = "torch", specifier = ">=2.2" },
+    { name = "ty", marker = "extra == 'style'", specifier = ">=0.0.1a23" },
+    { name = "zarr", marker = "extra == 'products'", specifier = ">=3" },
+]
+provides-extras = ["products", "knn", "onnx", "style", "tests", "all"]
 
 [[package]]
 name = "numcodecs"

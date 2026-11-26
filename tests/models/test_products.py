@@ -9,9 +9,9 @@ import numpy as np
 import pytest
 import torch
 
-import earthinr.models.products as products_mod
-from earthinr._errors import DependencyNotFoundError
-from earthinr.models.products import (
+import neuralftw.models.products as products_mod
+from neuralftw._errors import DependencyNotFoundError
+from neuralftw.models.products import (
     AEF_DIM,
     AEF_LAT_ORIGIN,
     AEF_LON_ORIGIN,
@@ -179,10 +179,10 @@ class TestProductHelpers:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def _missing(name: str, extra: str | None = None) -> Any:
-            raise DependencyNotFoundError(f'pip install earthinr[{extra}]')
+            raise DependencyNotFoundError(f'pip install neuralftw[{extra}]')
 
         monkeypatch.setattr(products_mod, 'lazy_import', _missing)
-        with pytest.raises(DependencyNotFoundError, match=r'earthinr\[products\]'):
+        with pytest.raises(DependencyNotFoundError, match=r'neuralftw\[products\]'):
             _open_aef_mosaic()
 
     def test_shard_index_and_inner_chunk_missing_branches(

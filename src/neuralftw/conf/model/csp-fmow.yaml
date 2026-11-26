@@ -1,0 +1,5 @@
+name: csp-fmow
+target: neuralftw.models.csp.CSPLocationEncoder
+kwargs:
+  weights: FMOW
+description: CSP fMoW GridCell location encoder (256-d, unlicensed upstream).

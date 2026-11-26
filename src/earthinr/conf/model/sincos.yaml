@@ -1,4 +1,0 @@
-name: sincos
-target: earthinr.models.encoders.SinCosLocationEncoder
-kwargs: {}
-description: Trigonometric sin/cos (lat, lon) coordinate encoder (4-d).
