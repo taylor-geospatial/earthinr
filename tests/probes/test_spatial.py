@@ -3,6 +3,7 @@
 
 import numpy as np
 import pytest
+from sklearn.neighbors import BallTree
 
 from neuralftw.probes import spatial as sp_mod
 from neuralftw.probes.spatial import (
@@ -12,7 +13,7 @@ from neuralftw.probes.spatial import (
     idw_probe_score,
     kriging_probe_score,
 )
-from neuralftw.probes.splits import spatial_fold_ids
+from neuralftw.probes.splits import EARTH_RADIUS_KM, spatial_fold_ids
 
 
 def _make_spatial_data(
@@ -64,6 +65,19 @@ class TestIDWProbeScore:
         )
         assert s_tm > 0.6
         assert len(f_tm) == 1
+
+        # Exact regression parity with sklearn BallTree(metric='haversine')
+        s_reg_tm, _ = idw_probe_score(
+            lat, lon, y_reg, task_type='regression', k=10, test_mask=tm
+        )
+        rad = np.radians(np.stack([lat, lon], axis=1))
+        dist, nn = BallTree(rad[~tm], metric='haversine').query(rad[tm], k=10)
+        inv = 1.0 / np.maximum(dist * EARTH_RADIUS_KM, 0.01)
+        w = inv / inv.sum(axis=1, keepdims=True)
+        pred = (w * y_reg[~tm][nn]).sum(axis=1)
+        ss_res = float(np.sum((y_reg[tm] - pred) ** 2))
+        ss_tot = max(float(np.sum((y_reg[tm] - y_reg[tm].mean()) ** 2)), 1e-12)
+        assert s_reg_tm == pytest.approx(1.0 - ss_res / ss_tot, abs=1e-12)
 
     def test_validation_errors(self) -> None:
         lat, lon, y_reg, _ = _make_spatial_data(n=10)
