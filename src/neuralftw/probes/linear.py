@@ -10,8 +10,6 @@ from typing import Any, Literal, overload
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from sklearn.linear_model import Ridge
-from sklearn.utils.validation import check_array, check_X_y
 from torch import Tensor
 
 from .._utils import float64_device, resolve_device
@@ -123,7 +121,9 @@ class RidgeCP:
         Raises:
             ValueError: If feature dimensionality does not match the fitted probe.
         """
-        x = check_array(features, dtype=np.float64)
+        x = np.asarray(features, dtype=np.float64)
+        if x.ndim != 2 or x.shape[0] == 0 or not np.isfinite(x).all():
+            raise ValueError('features must be a non-empty finite 2D array.')
         if x.shape[1] != self.mean_.size:
             raise ValueError(
                 f'Expected {self.mean_.size} embedding dimensions, got {x.shape[1]}.'
@@ -169,9 +169,18 @@ def fit_ridge_cp(
     Raises:
         ValueError: If *alpha*, *gamma*, or *boundaries* are invalid.
     """
-    features, targets = check_X_y(
-        x, y, dtype=np.float64, multi_output=True, y_numeric=True, ensure_min_samples=2
-    )
+    features = np.asarray(x, dtype=np.float64)
+    if features.ndim != 2 or features.shape[0] < 2 or not np.isfinite(features).all():
+        raise ValueError('x must be a finite 2D array with at least 2 samples.')
+    targets = np.asarray(y, dtype=np.float64)
+    if (
+        targets.ndim not in (1, 2)
+        or targets.shape[0] != features.shape[0]
+        or not np.isfinite(targets).all()
+    ):
+        raise ValueError(
+            'y must be a finite 1D or 2D array with the same number of rows as x.'
+        )
     if not np.isfinite(alpha) or alpha <= 0.0:
         raise ValueError(f'alpha must be finite and positive, got {alpha}.')
     weights = chunked_penalty_weights(features.shape[1], gamma, boundaries)
@@ -184,13 +193,23 @@ def fit_ridge_cp(
         scale = np.ones(features.shape[1], dtype=np.float64)
         z = features
     rescale = weights**-0.5
-    model = Ridge(alpha=alpha, fit_intercept=True).fit(z * rescale, targets)
+    z_scaled = z * rescale
+    x_mean = z_scaled.mean(axis=0)
+    y_mean = targets.mean(axis=0)
+    xc = z_scaled - x_mean
+    yc = targets - y_mean
+    u, s, vt = np.linalg.svd(xc, full_matrices=False)
+    shrink = s / (s * s + alpha)
+    if targets.ndim == 1:
+        w = vt.T @ (shrink * (u.T @ yc))
+        intercept: float | NDArray[np.float64] = float(y_mean - x_mean @ w)
+        coef = np.asarray(w * rescale, dtype=np.float64)
+    else:
+        w = vt.T @ (shrink[:, None] * (u.T @ yc))
+        intercept = np.asarray(y_mean - x_mean @ w, dtype=np.float64)
+        coef = np.asarray(w.T * rescale, dtype=np.float64)
     return RidgeCP(
-        mean=mean,
-        scale=scale,
-        coef=np.asarray(model.coef_, dtype=np.float64) * rescale,
-        intercept=model.intercept_,
-        standardize=standardize,
+        mean=mean, scale=scale, coef=coef, intercept=intercept, standardize=standardize
     )
 
 

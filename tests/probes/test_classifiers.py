@@ -41,14 +41,16 @@ class TestKNNProbeScore:
         assert len(fold_scores) == 3
         assert len(cms) == 3
 
-        # test_mask path matches scikit-learn KNeighborsClassifier exactly
+        # test_mask path matches scikit-learn KNeighborsClassifier exactly (default dynamic chunking & explicit chunk_size)
         tm = np.arange(len(x)) >= 60
+        s_dyn, _ = knn_probe_score(x, y_cls, k=3, test_mask=tm)
         s_tm, f_tm = knn_probe_score(x, y_cls, k=3, test_mask=tm, chunk_size=10)
         scaler = StandardScaler().fit(x[~tm])
         ref_clf = KNeighborsClassifier(n_neighbors=3, metric='euclidean').fit(
             scaler.transform(x[~tm]), y_cls[~tm]
         )
         ref_acc = float(np.mean(ref_clf.predict(scaler.transform(x[tm])) == y_cls[tm]))
+        assert s_dyn == pytest.approx(ref_acc)
         assert s_tm == pytest.approx(ref_acc)
         assert len(f_tm) == 1
 

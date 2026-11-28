@@ -9,7 +9,6 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.optimize import least_squares
 from scipy.spatial import KDTree
-from sklearn.neighbors import BallTree
 
 from .linear import _resolve_outer_splits
 from .metrics import confusion_matrix
@@ -67,9 +66,10 @@ def idw_probe_score(
 ) -> tuple[float, list[float]]:
     """Evaluate inverse-distance-weighted great-circle k-NN interpolation.
 
-    Queries a Haversine :class:`sklearn.neighbors.BallTree` on ``(lat, lon)`` with
-    inverse-distance weights floored at 10 m (``0.01 km``) for coincident points.
-    Uses deterministic :func:`neuralftw.probes.splits.random_fold_ids` for random folds.
+    Queries a 3D unit-sphere :class:`scipy.spatial.KDTree` on ``(lat, lon)`` and
+    converts chord distances to exact great-circle distances, with inverse-distance
+    weights floored at 10 m (``0.01 km``) for coincident points. Uses deterministic
+    :func:`neuralftw.probes.splits.random_fold_ids` for random folds.
 
     Args:
         lat: One-dimensional array of latitudes in degrees.
@@ -114,13 +114,15 @@ def idw_probe_score(
         n_valid, valid, folds, seed, test_mask, fold_assign
     )
 
-    rad = np.radians(np.stack([la, lo], axis=1))
+    xyz = _unit_xyz(la, lo)
     fold_scores: list[float] = []
     for tr_idx, te_idx in outer_splits:
-        tree = BallTree(rad[tr_idx], metric='haversine')
+        tree = KDTree(xyz[tr_idx])
         k_eff = min(k, len(tr_idx))
-        dist, nn_idx = tree.query(rad[te_idx], k=k_eff)
-        dist_km = dist * EARTH_RADIUS_KM
+        chord, raw_idx = tree.query(xyz[te_idx], k=k_eff)
+        chord_2d = np.asarray(chord, dtype=np.float64).reshape(len(te_idx), k_eff)
+        nn_idx = np.asarray(raw_idx, dtype=np.int64).reshape(len(te_idx), k_eff)
+        dist_km = 2.0 * EARTH_RADIUS_KM * np.arcsin(np.clip(0.5 * chord_2d, 0.0, 1.0))
         inv = 1.0 / np.maximum(dist_km, 0.01)
         weights = inv / inv.sum(axis=1, keepdims=True)
         if is_reg:

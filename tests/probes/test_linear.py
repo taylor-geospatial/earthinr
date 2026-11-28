@@ -98,9 +98,15 @@ class TestFitRidgeCP:
     def test_invalid_inputs(self) -> None:
         x = np.ones((6, 3))
         y = np.ones(6)
+        with pytest.raises(ValueError, match='finite 2D array with at least 2'):
+            fit_ridge_cp(np.ones((1, 3)), np.ones(1))
+        with pytest.raises(ValueError, match='finite 1D or 2D array'):
+            fit_ridge_cp(x, np.ones(5))
         with pytest.raises(ValueError, match='alpha must be finite'):
             fit_ridge_cp(x, y, alpha=0.0)
         model = fit_ridge_cp(x, y, alpha=1.0)
+        with pytest.raises(ValueError, match='non-empty finite 2D array'):
+            model.predict(np.ones(3))
         with pytest.raises(ValueError, match='Expected 3 embedding dimensions'):
             model.predict(np.ones((2, 4)))
 

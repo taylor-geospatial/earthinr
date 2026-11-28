@@ -55,14 +55,12 @@ dependencies = [
     "pyyaml>=6",
     # safetensors 0.4+ required for zero-copy PyTorch tensor checkpoint loading
     "safetensors>=0.4",
-    # scikit-learn 1.5+ required for Python 3.13+ probe baselines and spatial splitting
-    "scikit-learn>=1.5",
     # scipy 1.14+ required for Python 3.13+ spatial KDTree queries and spherical harmonics
     "scipy>=1.14",
     # torch 2.5+ required for Python 3.13+ wheels and stable inference_mode/linalg APIs
     "torch>=2.5",
-    # torchid 0.6.0+ required for pure-PyTorch intrinsic dimension estimators
-    "torchid>=0.6.0",
+    # torchid 0.7.0+ required for pure-PyTorch intrinsic dimension estimators (MPS + no torchmetrics)
+    "torchid>=0.7.0",
 ]
 
 [project.urls]
@@ -99,6 +97,8 @@ tests = [
     "pytest-cov>=5",
     # pytest-socket 0.7+ required to disable accidental network access in unit tests
     "pytest-socket>=0.7",
+    # scikit-learn 1.5+ used as reference parity oracle in probe unit tests
+    "scikit-learn>=1.5",
 ]
 all = [
     "neuralftw[products,style,tests]",

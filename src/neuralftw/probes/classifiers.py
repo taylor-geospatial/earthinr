@@ -3,12 +3,13 @@
 
 """k-NN, L-BFGS logistic regression, and MLP probes for frozen embeddings."""
 
+import contextlib
+from collections.abc import Generator
 from typing import Any
 
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from sklearn.preprocessing import StandardScaler
 from torch import Tensor, nn
 
 from .._utils import resolve_device
@@ -16,6 +17,35 @@ from .linear import _inner_splits, _resolve_outer_splits, _valid_feature_label_m
 from .metrics import confusion_matrix
 
 DEFAULT_LOGREG_CS: tuple[float, ...] = (1e-4, 1e-3, 1e-2, 1e-1, 1.0, 1e1, 1e2, 1e3, 1e4)
+
+# Cap each k-NN query chunk's float32 score matrix at 2**28 entries (1 GiB).
+_MAX_SCORE_ENTRIES = 2**28
+
+
+@contextlib.contextmanager
+def _full_precision_matmul() -> Generator[None]:
+    """Disable TF32/reduced-precision matmul so exact neighbor ranking stays intact."""
+    previous = torch.get_float32_matmul_precision()
+    torch.set_float32_matmul_precision('highest')
+    try:
+        yield
+    finally:
+        torch.set_float32_matmul_precision(previous)
+
+
+def _standardize_fold(
+    x_tr: NDArray[np.float32], x_te: NDArray[np.float32]
+) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
+    """Z-score features using training-fold mean and population std."""
+    tr64 = np.asarray(x_tr, dtype=np.float64)
+    te64 = np.asarray(x_te, dtype=np.float64)
+    mean = tr64.mean(axis=0)
+    scale = tr64.std(axis=0)
+    scale[scale == 0.0] = 1.0
+    return (
+        ((tr64 - mean) / scale).astype(np.float32),
+        ((te64 - mean) / scale).astype(np.float32),
+    )
 
 
 def _torch_knn_predict(
@@ -26,19 +56,26 @@ def _torch_knn_predict(
     k: int,
     n_classes: int,
     device: torch.device,
-    chunk_size: int = 1024,
+    chunk_size: int | None = None,
 ) -> NDArray[np.int64]:
-    """Exact L2 k-NN majority-vote classifier in pure PyTorch."""
-    x_tr_t = torch.as_tensor(x_tr, dtype=torch.float32, device=device)
+    """Exact L2 k-NN majority-vote classifier via TF32-safe GEMM in pure PyTorch."""
+    x_tr_t = torch.as_tensor(
+        np.ascontiguousarray(x_tr), dtype=torch.float32, device=device
+    )
     y_tr_t = torch.as_tensor(y_tr, dtype=torch.long, device=device)
+    train_sq = (x_tr_t * x_tr_t).sum(dim=1)
+    step = max(1, _MAX_SCORE_ENTRIES // len(x_tr)) if chunk_size is None else chunk_size
     preds: list[NDArray[np.int64]] = []
-    with torch.inference_mode():
-        for start in range(0, len(x_te), chunk_size):
+    with torch.inference_mode(), _full_precision_matmul():
+        for start in range(0, len(x_te), step):
             q = torch.as_tensor(
-                x_te[start : start + chunk_size], dtype=torch.float32, device=device
+                np.ascontiguousarray(x_te[start : start + step]),
+                dtype=torch.float32,
+                device=device,
             )
-            dists = torch.cdist(q, x_tr_t, p=2.0)
-            _, top_idx = torch.topk(dists, k=k, dim=1, largest=False)
+            # argmax(2 q.t - |t|^2) == argmin(|q - t|^2); |q|^2 is constant per row.
+            scores = 2.0 * (q @ x_tr_t.T) - train_sq
+            _, top_idx = torch.topk(scores, k=k, dim=1, largest=True)
             nbr_labels = y_tr_t[top_idx]
             votes = torch.zeros(
                 (q.shape[0], n_classes), dtype=torch.int64, device=device
@@ -61,12 +98,13 @@ def knn_probe_score(
     test_mask: NDArray[np.bool_] | None = None,
     fold_assign: NDArray[np.integer[Any]] | None = None,
     confusions: list[NDArray[np.int64]] | None = None,
-    chunk_size: int = 1024,
+    chunk_size: int | None = None,
 ) -> tuple[float, list[float]]:
     """Evaluate classification accuracy with an exact PyTorch L2 k-NN probe.
 
-    Standardizes features inside each fold and runs chunked exact Euclidean
-    nearest-neighbor lookup via ``torch.cdist`` on *device* (CPU, CUDA, or MPS).
+    Standardizes features inside each fold and runs memory-budgeted exact
+    Euclidean nearest-neighbor search via TF32-safe matrix multiplication on
+    *device* (CPU, CUDA, or MPS).
 
     Args:
         features: Two-dimensional feature matrix of shape ``(N, D)``.
@@ -79,7 +117,9 @@ def knn_probe_score(
         fold_assign: Optional integer fold-group assignment per row.
         confusions: Optional list populated with one ``[C, C]`` confusion matrix per
             scored outer fold.
-        chunk_size: Maximum number of query points scored per ``torch.cdist`` chunk.
+        chunk_size: Optional maximum number of query points per GEMM chunk. When
+            ``None`` (default), automatically sized to cap each score matrix at
+            1 GiB.
 
     Returns:
         Tuple ``(mean_accuracy, fold_accuracies)``.
@@ -90,7 +130,7 @@ def knn_probe_score(
     """
     if k < 1:
         raise ValueError(f'k must be at least 1, got {k}.')
-    if chunk_size < 1:
+    if chunk_size is not None and chunk_size < 1:
         raise ValueError(f'chunk_size must be at least 1, got {chunk_size}.')
     dev = resolve_device(device)
     valid = _valid_feature_label_mask(features, labels, 'classification')
@@ -108,9 +148,7 @@ def knn_probe_score(
 
     fold_scores: list[float] = []
     for tr_idx, te_idx in outer_splits:
-        scaler = StandardScaler().fit(feats[tr_idx])
-        x_tr = scaler.transform(feats[tr_idx]).astype(np.float32)
-        x_te = scaler.transform(feats[te_idx]).astype(np.float32)
+        x_tr, x_te = _standardize_fold(feats[tr_idx], feats[te_idx])
         y_tr = y[tr_idx]
         y_te = y[te_idx]
         k_eff = min(k, len(tr_idx))
@@ -293,13 +331,9 @@ def logreg_probe_score(
             in_splits = _inner_splits(tr_idx, outer_groups, f, folds, seed)
             c_scores = np.zeros(len(c_values), dtype=np.float64)
             for in_tr, in_val in in_splits:
-                in_scaler = StandardScaler().fit(feats[in_tr])
-                x_itr = torch.as_tensor(
-                    in_scaler.transform(feats[in_tr]), dtype=torch.float32
-                )
-                x_ival = torch.as_tensor(
-                    in_scaler.transform(feats[in_val]), dtype=torch.float32
-                )
+                x_itr_np, x_ival_np = _standardize_fold(feats[in_tr], feats[in_val])
+                x_itr = torch.as_tensor(x_itr_np, dtype=torch.float32)
+                x_ival = torch.as_tensor(x_ival_np, dtype=torch.float32)
                 y_itr = torch.as_tensor(y[in_tr], dtype=torch.long)
                 y_ival = y[in_val]
                 for ci, c_val in enumerate(c_values):
@@ -309,9 +343,9 @@ def logreg_probe_score(
                     c_scores[ci] += float(np.mean(clf.predict(x_ival) == y_ival))
             best_c = float(c_values[int(np.argmax(c_scores))])
 
-        scaler = StandardScaler().fit(feats[tr_idx])
-        x_tr = torch.as_tensor(scaler.transform(feats[tr_idx]), dtype=torch.float32)
-        x_te = torch.as_tensor(scaler.transform(feats[te_idx]), dtype=torch.float32)
+        x_tr_np, x_te_np = _standardize_fold(feats[tr_idx], feats[te_idx])
+        x_tr = torch.as_tensor(x_tr_np, dtype=torch.float32)
+        x_te = torch.as_tensor(x_te_np, dtype=torch.float32)
         y_tr = torch.as_tensor(y[tr_idx], dtype=torch.long)
         y_te = y[te_idx]
         model = LBFGSLogReg(c=best_c, max_iter=max_iter, device=dev, seed=seed).fit(
